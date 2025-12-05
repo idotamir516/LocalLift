@@ -1,50 +1,97 @@
-# [PROJECT_NAME] Constitution
-<!-- Example: Spec Constitution, TaskFlow Constitution, etc. -->
+<!--
+  SYNC IMPACT REPORT
+  ==================
+  Version Change: N/A → 1.0.0 (initial ratification)
+  
+  Added Principles:
+  - I. Simplicity First
+  - II. It Just Works
+  - III. Minimal Testing
+  
+  Added Sections:
+  - Core Principles (3 principles)
+  - Technology Stack
+  - Governance
+  
+  Removed Sections: N/A (initial version)
+  
+  Templates Requiring Updates:
+  - ✅ plan-template.md (no updates needed - template is generic)
+  - ✅ spec-template.md (no updates needed - template is generic)
+  - ✅ tasks-template.md (no updates needed - template is generic)
+  
+  Deferred Items: None
+-->
+
+# Workout App Constitution
 
 ## Core Principles
 
-### [PRINCIPLE_1_NAME]
-<!-- Example: I. Library-First -->
-[PRINCIPLE_1_DESCRIPTION]
-<!-- Example: Every feature starts as a standalone library; Libraries must be self-contained, independently testable, documented; Clear purpose required - no organizational-only libraries -->
+### I. Simplicity First
 
-### [PRINCIPLE_2_NAME]
-<!-- Example: II. CLI Interface -->
-[PRINCIPLE_2_DESCRIPTION]
-<!-- Example: Every library exposes functionality via CLI; Text in/out protocol: stdin/args → stdout, errors → stderr; Support JSON + human-readable formats -->
+Every decision MUST favor the simplest solution that works. This is a personal app for
+a single user—complexity is the enemy.
 
-### [PRINCIPLE_3_NAME]
-<!-- Example: III. Test-First (NON-NEGOTIABLE) -->
-[PRINCIPLE_3_DESCRIPTION]
-<!-- Example: TDD mandatory: Tests written → User approved → Tests fail → Then implement; Red-Green-Refactor cycle strictly enforced -->
+- YAGNI (You Aren't Gonna Need It) is the default stance
+- No premature optimization or over-engineering
+- If a feature isn't needed today, don't build it
+- Prefer built-in Android components over third-party libraries when practical
+- Delete code rather than commenting it out
 
-### [PRINCIPLE_4_NAME]
-<!-- Example: IV. Integration Testing -->
-[PRINCIPLE_4_DESCRIPTION]
-<!-- Example: Focus areas requiring integration tests: New library contract tests, Contract changes, Inter-service communication, Shared schemas -->
+**Rationale**: This app exists to serve one user's workout needs. Time spent on
+architecture astronautics is time not spent working out.
 
-### [PRINCIPLE_5_NAME]
-<!-- Example: V. Observability, VI. Versioning & Breaking Changes, VII. Simplicity -->
-[PRINCIPLE_5_DESCRIPTION]
-<!-- Example: Text I/O ensures debuggability; Structured logging required; Or: MAJOR.MINOR.BUILD format; Or: Start simple, YAGNI principles -->
+### II. It Just Works
 
-## [SECTION_2_NAME]
-<!-- Example: Additional Constraints, Security Requirements, Performance Standards, etc. -->
+Functionality and reliability trump elegance. The app MUST work when the user needs it.
 
-[SECTION_2_CONTENT]
-<!-- Example: Technology stack requirements, compliance standards, deployment policies, etc. -->
+- Features MUST be usable offline (gym environments often have poor connectivity)
+- UI MUST be operable with sweaty hands and minimal attention
+- Data MUST persist reliably—losing workout history is unacceptable
+- Crash-free operation is mandatory; graceful degradation when possible
+- Performance matters only where it affects usability (e.g., quick app launch)
 
-## [SECTION_3_NAME]
-<!-- Example: Development Workflow, Review Process, Quality Gates, etc. -->
+**Rationale**: A pretty app that crashes mid-workout is worthless. A simple app that
+reliably tracks reps is valuable.
 
-[SECTION_3_CONTENT]
-<!-- Example: Code review requirements, testing gates, deployment approval process, etc. -->
+### III. Minimal Testing
+
+Test what matters, skip what doesn't. Heavyweight test infrastructure is overkill for
+a personal project.
+
+- Manual testing during development is acceptable
+- Automated tests are OPTIONAL and reserved for complex logic (e.g., calculations)
+- No mandatory TDD—write tests when they save debugging time
+- Integration tests only if a bug keeps recurring
+- UI tests are explicitly out of scope
+
+**Rationale**: The cost of a bug is low (only the developer is affected), and the cost
+of extensive test infrastructure is high relative to project value.
+
+## Technology Stack
+
+- **Platform**: Android (Kotlin preferred, Java acceptable)
+- **Min SDK**: Target reasonably modern devices (API 26+ / Android 8.0+)
+- **Architecture**: Keep it simple—no need for Clean Architecture, MVVM, or complex
+  patterns unless they solve a real problem
+- **Storage**: Room or SQLite for local persistence; no cloud sync required
+- **Dependencies**: Minimize third-party libraries; each added dependency MUST justify
+  its inclusion
 
 ## Governance
-<!-- Example: Constitution supersedes all other practices; Amendments require documentation, approval, migration plan -->
 
-[GOVERNANCE_RULES]
-<!-- Example: All PRs/reviews must verify compliance; Complexity must be justified; Use [GUIDANCE_FILE] for runtime development guidance -->
+This constitution defines the guiding principles for the Workout App. All development
+decisions SHOULD align with these principles.
 
-**Version**: [CONSTITUTION_VERSION] | **Ratified**: [RATIFICATION_DATE] | **Last Amended**: [LAST_AMENDED_DATE]
-<!-- Example: Version: 2.1.1 | Ratified: 2025-06-13 | Last Amended: 2025-07-16 -->
+**Amendment Process**:
+- Constitution updates require updating this file and incrementing the version
+- Version follows semantic versioning: MAJOR.MINOR.PATCH
+  - MAJOR: Fundamental principle changes
+  - MINOR: New principles or significant clarifications
+  - PATCH: Wording fixes, typo corrections
+
+**Compliance**:
+- No formal review process required—this is a personal project
+- Use common sense: if you're overcomplicating something, step back and simplify
+
+**Version**: 1.0.0 | **Ratified**: 2025-12-03 | **Last Amended**: 2025-12-03
