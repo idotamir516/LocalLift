@@ -1,8 +1,11 @@
 package com.workout.app.ui.components
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.background
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -17,8 +20,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Card
@@ -26,19 +30,18 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
@@ -52,6 +55,7 @@ import kotlinx.coroutines.launch
 /**
  * A visual display for the rest timer.
  * Shows a circular progress indicator with time remaining and controls.
+ * Can be minimized to show just the time remaining.
  */
 @Composable
 fun RestTimerDisplay(
@@ -63,6 +67,7 @@ fun RestTimerDisplay(
     onSubtractTime: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    var isExpanded by remember { mutableStateOf(true) }
     val animatedProgress by animateFloatAsState(
         targetValue = timerState.progress,
         animationSpec = tween(durationMillis = 300),
@@ -81,165 +86,321 @@ fun RestTimerDisplay(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(24.dp),
+                .padding(horizontal = 16.dp, vertical = if (isExpanded) 16.dp else 12.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text(
-                text = "REST",
-                style = MaterialTheme.typography.labelLarge.copy(
-                    letterSpacing = 3.sp
-                ),
-                color = MaterialTheme.colorScheme.primary
-            )
-            
-            Spacer(modifier = Modifier.height(16.dp))
-            
-            // Circular progress with time
-            Box(
-                contentAlignment = Alignment.Center,
-                modifier = Modifier.size(140.dp)
-            ) {
-                // Background track
-                CircularProgressIndicator(
-                    progress = { 1f },
-                    modifier = Modifier.size(140.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant,
-                    strokeWidth = 10.dp,
-                    trackColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
-                    strokeCap = StrokeCap.Round
-                )
-                
-                // Progress indicator
-                CircularProgressIndicator(
-                    progress = { animatedProgress },
-                    modifier = Modifier.size(140.dp),
-                    color = MaterialTheme.colorScheme.primary,
-                    strokeWidth = 10.dp,
-                    trackColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
-                    strokeCap = StrokeCap.Round
-                )
-                
-                Text(
-                    text = timerState.formattedTime,
-                    style = MaterialTheme.typography.displaySmall.copy(
-                        fontWeight = FontWeight.Bold
-                    ),
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-            }
-            
-            Spacer(modifier = Modifier.height(24.dp))
-            
-            // Controls row: -5s, Pause/Resume, +5s
+            // Header row - shows time only when minimized, just expand/collapse when expanded
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceEvenly,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { isExpanded = !isExpanded },
+                horizontalArrangement = if (isExpanded) Arrangement.End else Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // -5 seconds button with long-press repeat
-                Surface(
-                    shape = RoundedCornerShape(20.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                    modifier = Modifier.pointerInput(Unit) {
-                        detectTapGestures(
-                            onTap = { onSubtractTime() },
-                            onPress = {
-                                var job: Job? = null
-                                try {
-                                    // Wait for long press threshold
-                                    job = scope.launch {
-                                        delay(400) // Initial delay before repeat starts
-                                        while (true) {
-                                            onSubtractTime()
-                                            delay(100) // Repeat interval
-                                        }
-                                    }
-                                    awaitRelease()
-                                } finally {
-                                    job?.cancel()
-                                }
-                            }
-                        )
+                // Timer info - only show when minimized
+                if (!isExpanded) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        // Small circular progress
+                        Box(
+                            contentAlignment = Alignment.Center,
+                            modifier = Modifier.size(40.dp)
+                        ) {
+                            CircularProgressIndicator(
+                                progress = { 1f },
+                                modifier = Modifier.size(40.dp),
+                                color = MaterialTheme.colorScheme.surfaceVariant,
+                                strokeWidth = 4.dp,
+                                trackColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                                strokeCap = StrokeCap.Round
+                            )
+                            CircularProgressIndicator(
+                                progress = { animatedProgress },
+                                modifier = Modifier.size(40.dp),
+                                color = MaterialTheme.colorScheme.primary,
+                                strokeWidth = 4.dp,
+                                trackColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                                strokeCap = StrokeCap.Round
+                            )
+                        }
+                        
+                        Column {
+                            Text(
+                                text = "REST",
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    letterSpacing = 2.sp
+                                ),
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Text(
+                                text = timerState.formattedTime,
+                                style = MaterialTheme.typography.titleLarge.copy(
+                                    fontWeight = FontWeight.Bold
+                                ),
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
                     }
-                ) {
-                    Text(
-                        "-5s",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
-                    )
                 }
                 
-                // Pause/Resume button
-                FilledIconButton(
-                    onClick = if (timerState.isRunning) onPause else onResume,
-                    modifier = Modifier.size(60.dp),
-                    colors = IconButtonDefaults.filledIconButtonColors(
-                        containerColor = MaterialTheme.colorScheme.primary
-                    )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
+                    // Quick controls in minimized view
+                    if (!isExpanded) {
+                        // -5s button
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant,
+                            modifier = Modifier.pointerInput(Unit) {
+                                detectTapGestures(
+                                    onTap = { onSubtractTime() },
+                                    onPress = {
+                                        var job: Job? = null
+                                        try {
+                                            job = scope.launch {
+                                                delay(400)
+                                                while (true) {
+                                                    onSubtractTime()
+                                                    delay(100)
+                                                }
+                                            }
+                                            awaitRelease()
+                                        } finally {
+                                            job?.cancel()
+                                        }
+                                    }
+                                )
+                            }
+                        ) {
+                            Text(
+                                "-5",
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        }
+                        
+                        // +5s button
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant,
+                            modifier = Modifier.pointerInput(Unit) {
+                                detectTapGestures(
+                                    onTap = { onAddTime() },
+                                    onPress = {
+                                        var job: Job? = null
+                                        try {
+                                            job = scope.launch {
+                                                delay(400)
+                                                while (true) {
+                                                    onAddTime()
+                                                    delay(100)
+                                                }
+                                            }
+                                            awaitRelease()
+                                        } finally {
+                                            job?.cancel()
+                                        }
+                                    }
+                                )
+                            }
+                        ) {
+                            Text(
+                                "+5",
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                        
+                        // Skip button
+                        Surface(
+                            onClick = onSkip,
+                            shape = RoundedCornerShape(8.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant
+                        ) {
+                            Text(
+                                "Skip",
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                    
+                    // Expand/collapse icon
                     Icon(
-                        imageVector = if (timerState.isRunning) {
-                            Icons.Default.Pause
-                        } else {
-                            Icons.Default.PlayArrow
-                        },
-                        contentDescription = if (timerState.isRunning) "Pause" else "Resume",
-                        modifier = Modifier.size(28.dp)
-                    )
-                }
-                
-                // +5 seconds button with long-press repeat
-                Surface(
-                    shape = RoundedCornerShape(20.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                    modifier = Modifier.pointerInput(Unit) {
-                        detectTapGestures(
-                            onTap = { onAddTime() },
-                            onPress = {
-                                var job: Job? = null
-                                try {
-                                    // Wait for long press threshold
-                                    job = scope.launch {
-                                        delay(400) // Initial delay before repeat starts
-                                        while (true) {
-                                            onAddTime()
-                                            delay(100) // Repeat interval
-                                        }
-                                    }
-                                    awaitRelease()
-                                } finally {
-                                    job?.cancel()
-                                }
-                            }
-                        )
-                    }
-                ) {
-                    Text(
-                        "+5s",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
+                        imageVector = if (isExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                        contentDescription = if (isExpanded) "Minimize" else "Expand",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
             
-            Spacer(modifier = Modifier.height(12.dp))
-            
-            // Skip button at the bottom
-            Surface(
-                onClick = onSkip,
-                shape = CircleShape,
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                modifier = Modifier.size(44.dp)
+            // Expanded content - controls
+            AnimatedVisibility(
+                visible = isExpanded,
+                enter = expandVertically(),
+                exit = shrinkVertically()
             ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(
-                        imageVector = Icons.Default.Close,
-                        contentDescription = "Skip rest",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(20.dp)
-                    )
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Spacer(modifier = Modifier.height(20.dp))
+                    
+                    // Large circular progress with time (only in expanded view)
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier.size(140.dp)
+                    ) {
+                        // Background track
+                        CircularProgressIndicator(
+                            progress = { 1f },
+                            modifier = Modifier.size(140.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant,
+                            strokeWidth = 10.dp,
+                            trackColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                            strokeCap = StrokeCap.Round
+                        )
+                        
+                        // Progress indicator
+                        CircularProgressIndicator(
+                            progress = { animatedProgress },
+                            modifier = Modifier.size(140.dp),
+                            color = MaterialTheme.colorScheme.primary,
+                            strokeWidth = 10.dp,
+                            trackColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                            strokeCap = StrokeCap.Round
+                        )
+                        
+                        Text(
+                            text = timerState.formattedTime,
+                            style = MaterialTheme.typography.displaySmall.copy(
+                                fontWeight = FontWeight.Bold
+                            ),
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                    
+                    Spacer(modifier = Modifier.height(24.dp))
+            
+                    // Controls row: -5s, Pause/Resume, +5s
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceEvenly,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // -5 seconds button with long-press repeat
+                        Surface(
+                            shape = RoundedCornerShape(20.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                            modifier = Modifier.pointerInput(Unit) {
+                                detectTapGestures(
+                                    onTap = { onSubtractTime() },
+                                    onPress = {
+                                        var job: Job? = null
+                                        try {
+                                            // Wait for long press threshold
+                                            job = scope.launch {
+                                                delay(400) // Initial delay before repeat starts
+                                                while (true) {
+                                                    onSubtractTime()
+                                                    delay(100) // Repeat interval
+                                                }
+                                            }
+                                            awaitRelease()
+                                        } finally {
+                                            job?.cancel()
+                                        }
+                                    }
+                                )
+                            }
+                        ) {
+                            Text(
+                                "-5s",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
+                            )
+                        }
+                
+                        // Pause/Resume button
+                        FilledIconButton(
+                            onClick = if (timerState.isRunning) onPause else onResume,
+                            modifier = Modifier.size(60.dp),
+                            colors = IconButtonDefaults.filledIconButtonColors(
+                                containerColor = MaterialTheme.colorScheme.primary
+                            )
+                        ) {
+                            Icon(
+                                imageVector = if (timerState.isRunning) {
+                                    Icons.Default.Pause
+                                } else {
+                                    Icons.Default.PlayArrow
+                                },
+                                contentDescription = if (timerState.isRunning) "Pause" else "Resume",
+                                modifier = Modifier.size(28.dp)
+                            )
+                        }
+                
+                        // +5 seconds button with long-press repeat
+                        Surface(
+                            shape = RoundedCornerShape(20.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                            modifier = Modifier.pointerInput(Unit) {
+                                detectTapGestures(
+                                    onTap = { onAddTime() },
+                                    onPress = {
+                                        var job: Job? = null
+                                        try {
+                                            // Wait for long press threshold
+                                            job = scope.launch {
+                                                delay(400) // Initial delay before repeat starts
+                                                while (true) {
+                                                    onAddTime()
+                                                    delay(100) // Repeat interval
+                                                }
+                                            }
+                                            awaitRelease()
+                                        } finally {
+                                            job?.cancel()
+                                        }
+                                    }
+                                )
+                            }
+                        ) {
+                            Text(
+                                "+5s",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
+                            )
+                        }
+                    }
+            
+                    Spacer(modifier = Modifier.height(12.dp))
+            
+                    // Skip button at the bottom
+                    Surface(
+                        onClick = onSkip,
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                        modifier = Modifier.size(44.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = "Skip rest",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
                 }
             }
         }

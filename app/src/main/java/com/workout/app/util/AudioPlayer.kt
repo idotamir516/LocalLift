@@ -5,11 +5,15 @@ import android.media.AudioAttributes
 import android.media.MediaPlayer
 import android.media.RingtoneManager
 import android.net.Uri
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
 
 /**
- * Audio player that plays sounds through the media stream.
+ * Audio player that plays sounds through the media stream and handles vibration.
  * Using the media stream ensures sounds play even when the phone is on
  * Do Not Disturb or vibrate mode.
  * Used for rest timer completion alerts.
@@ -19,9 +23,13 @@ class AudioPlayer(private val context: Context) {
     private var soundUri: Uri? = null
     private var mediaPlayer: MediaPlayer? = null
     private val handler = Handler(Looper.getMainLooper())
+    private val settingsManager = SettingsManager.getInstance(context)
     
     // Maximum duration for the sound (2.5 seconds)
     private val maxDurationMs = 2500L
+    
+    // Vibration pattern: wait 0ms, vibrate 200ms, wait 100ms, vibrate 200ms
+    private val vibrationPattern = longArrayOf(0, 200, 100, 200)
     
     init {
         // Use notification sound - it's short and attention-grabbing
@@ -31,20 +39,45 @@ class AudioPlayer(private val context: Context) {
     }
     
     /**
-     * Plays a sound through the media stream.
+     * Plays a sound and/or vibrates based on user settings.
      * This bypasses Do Not Disturb and vibrate mode settings.
      * Used to alert the user when rest timer completes.
-     * Sound is limited to ~2.5 seconds max duration.
      */
     fun playNotificationSound() {
-        playSound()
+        if (settingsManager.getTimerSoundEnabledSync()) {
+            playSound()
+        }
+        if (settingsManager.getTimerVibrationEnabledSync()) {
+            vibrate()
+        }
     }
     
     /**
      * Plays the alert sound through the media stream.
      */
     fun playAlertSound() {
-        playSound()
+        playNotificationSound()
+    }
+    
+    private fun vibrate() {
+        try {
+            val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                val vibratorManager = context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
+                vibratorManager.defaultVibrator
+            } else {
+                @Suppress("DEPRECATION")
+                context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+            }
+            
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                vibrator.vibrate(VibrationEffect.createWaveform(vibrationPattern, -1))
+            } else {
+                @Suppress("DEPRECATION")
+                vibrator.vibrate(vibrationPattern, -1)
+            }
+        } catch (e: Exception) {
+            // Silently fail if vibration is not available
+        }
     }
     
     private fun playSound() {

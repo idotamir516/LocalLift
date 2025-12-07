@@ -70,6 +70,7 @@ import com.workout.app.ui.theme.InputFieldBackground
 import com.workout.app.ui.theme.InputFieldBorder
 import com.workout.app.ui.theme.NeonCyan
 import com.workout.app.ui.theme.WarmupColor
+import com.workout.app.util.SettingsManager
 
 /**
  * Data class for a template set being edited.
@@ -111,11 +112,20 @@ fun TemplateEditorScreen(
     initialName: String = "",
     initialExercises: List<EditableExercise> = emptyList(),
     onSave: (name: String, exercises: List<EditableExercise>) -> Unit = { _, _ -> },
-    onBack: () -> Unit = {}
+    onBack: () -> Unit = {},
+    settingsManager: SettingsManager? = null,
+    customExercises: kotlinx.coroutines.flow.Flow<List<com.workout.app.data.entities.CustomExercise>> = kotlinx.coroutines.flow.flowOf(emptyList()),
+    onCreateCustomExercise: (com.workout.app.data.entities.CustomExercise) -> Unit = {},
+    onDeleteCustomExercise: (com.workout.app.data.entities.CustomExercise) -> Unit = {}
 ) {
     var templateName by remember { mutableStateOf(initialName) }
     val exercises = remember { mutableStateListOf<EditableExercise>().apply { addAll(initialExercises) } }
     var showExercisePicker by remember { mutableStateOf(false) }
+    
+    // Get defaults from settings
+    val defaultRestSeconds = settingsManager?.getDefaultRestSecondsSync() ?: 90
+    val defaultSets = settingsManager?.getDefaultSetsPerExerciseSync() ?: 3
+    val defaultShowRpe = settingsManager?.getShowRpeByDefaultSync() ?: false
     
     val isNewTemplate = templateId == null
     val canSave = templateName.isNotBlank() && exercises.isNotEmpty()
@@ -345,14 +355,14 @@ fun TemplateEditorScreen(
         isVisible = showExercisePicker,
         onDismiss = { showExercisePicker = false },
         onExerciseSelected = { exercise ->
-            val defaultRestSeconds = 90
             exercises.add(
                 EditableExercise(
                     exerciseName = exercise.name,
-                    targetSets = 3,
+                    targetSets = defaultSets,
                     restSeconds = defaultRestSeconds,
+                    showRpe = defaultShowRpe,
                     orderIndex = exercises.size,
-                    sets = (1..3).map { 
+                    sets = (1..defaultSets).map { 
                         EditableTemplateSet(
                             setNumber = it,
                             restSeconds = defaultRestSeconds
@@ -362,7 +372,10 @@ fun TemplateEditorScreen(
             )
             showExercisePicker = false
         },
-        selectedExercises = exercises.map { it.exerciseName }
+        selectedExercises = exercises.map { it.exerciseName },
+        customExercises = customExercises,
+        onCreateCustomExercise = onCreateCustomExercise,
+        onDeleteCustomExercise = onDeleteCustomExercise
     )
 }
 

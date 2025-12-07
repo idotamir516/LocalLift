@@ -68,6 +68,10 @@ interface TemplateDao {
     @Query("SELECT * FROM workout_templates WHERE id = :templateId")
     suspend fun getTemplateById(templateId: Long): WorkoutTemplate?
     
+    // Get template by name (for duplicate detection)
+    @Query("SELECT * FROM workout_templates WHERE name = :name LIMIT 1")
+    suspend fun getTemplateByName(name: String): WorkoutTemplate?
+    
     // Get exercises for a template ordered by orderIndex
     @Query("SELECT * FROM template_exercises WHERE templateId = :templateId ORDER BY orderIndex ASC")
     fun getExercisesForTemplate(templateId: Long): Flow<List<TemplateExercise>>

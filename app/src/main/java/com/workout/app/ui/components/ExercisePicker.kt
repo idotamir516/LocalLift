@@ -5,6 +5,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -21,11 +23,18 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.FitnessCenter
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.BasicAlertDialog
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
@@ -37,22 +46,31 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.workout.app.data.AppDatabase
 import com.workout.app.data.Exercise
 import com.workout.app.data.ExerciseLibrary
+import com.workout.app.data.entities.CustomExercise
 import com.workout.app.ui.theme.NeonCyan
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.launch
 
 /**
  * A bottom sheet component for selecting exercises from the library.
@@ -62,6 +80,9 @@ import com.workout.app.ui.theme.NeonCyan
  * @param onDismiss Callback when the picker is dismissed
  * @param onExerciseSelected Callback when an exercise is selected
  * @param selectedExercises List of already selected exercise names (to show checkmarks)
+ * @param customExercises Flow of custom exercises from database
+ * @param onCreateCustomExercise Callback to create a new custom exercise
+ * @param onDeleteCustomExercise Callback to delete a custom exercise
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -69,29 +90,54 @@ fun ExercisePicker(
     isVisible: Boolean,
     onDismiss: () -> Unit,
     onExerciseSelected: (Exercise) -> Unit,
-    selectedExercises: List<String> = emptyList()
+    selectedExercises: List<String> = emptyList(),
+    customExercises: Flow<List<CustomExercise>> = flowOf(emptyList()),
+    onCreateCustomExercise: (CustomExercise) -> Unit = {},
+    onDeleteCustomExercise: (CustomExercise) -> Unit = {}
 ) {
     if (isVisible) {
         val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
         var searchQuery by remember { mutableStateOf("") }
         var selectedCategory by remember { mutableStateOf<String?>(null) }
+        var showCreateDialog by remember { mutableStateOf(false) }
+        
+        val customExerciseList by customExercises.collectAsState(initial = emptyList())
         
         val categories = ExerciseLibrary.categories
-        val exercises = remember(searchQuery, selectedCategory) {
+        
+        // Combine library exercises with custom exercises
+        val allExercises = remember(searchQuery, selectedCategory, customExerciseList) {
+            // Convert custom exercises to Exercise objects
+            val customAsExercises = customExerciseList.map { custom ->
+                Exercise(
+                    name = custom.name,
+                    primaryMuscle = custom.primaryMuscle,
+                    auxiliaryMuscles = custom.getAuxiliaryMusclesList(),
+                    isBodyweight = custom.isBodyweight
+                )
+            }
+            
+            // Combine with library exercises
+            val combined = ExerciseLibrary.exercises + customAsExercises
+            
             var result = if (selectedCategory != null) {
-                ExerciseLibrary.getByCategory(selectedCategory!!)
+                combined.filter { it.primaryMuscle == selectedCategory }
             } else {
-                ExerciseLibrary.exercises
+                combined
             }
             
             if (searchQuery.isNotBlank()) {
-                result = ExerciseLibrary.search(searchQuery)
-                if (selectedCategory != null) {
-                    result = result.filter { it.category == selectedCategory }
+                result = result.filter { 
+                    it.name.contains(searchQuery, ignoreCase = true) 
                 }
             }
             
-            result
+            result.sortedBy { it.name }
+        }
+        
+        // Track which exercises are custom (for showing delete option)
+        val customExerciseNames = remember(customExerciseList) {
+            customExerciseList.map { it.name }.toSet()
         }
         
         ModalBottomSheet(
@@ -194,33 +240,88 @@ fun ExercisePicker(
                 HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
                 
                 // Exercise list
-                if (exercises.isEmpty()) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(200.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = "No exercises found",
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 400.dp),
+                    contentPadding = PaddingValues(vertical = 8.dp)
+                ) {
+                    // Create Custom Exercise button at top
+                    item {
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp)
+                                .clickable { showCreateDialog = true },
+                            shape = RoundedCornerShape(12.dp),
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(40.dp)
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Add,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                }
+                                
+                                Spacer(modifier = Modifier.width(12.dp))
+                                
+                                Text(
+                                    text = "Create Custom Exercise",
+                                    style = MaterialTheme.typography.bodyLarge.copy(
+                                        fontWeight = FontWeight.Medium
+                                    ),
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        }
                     }
-                } else {
-                    LazyColumn(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(max = 400.dp),
-                        contentPadding = PaddingValues(vertical = 8.dp)
-                    ) {
-                        items(exercises) { exercise ->
+                    
+                    if (allExercises.isEmpty()) {
+                        item {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(150.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = "No exercises found",
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    } else {
+                        items(allExercises) { exercise ->
                             val isSelected = selectedExercises.contains(exercise.name)
+                            val isCustom = customExerciseNames.contains(exercise.name)
                             
                             ExerciseListItem(
                                 exercise = exercise,
                                 isSelected = isSelected,
-                                onClick = { onExerciseSelected(exercise) }
+                                isCustom = isCustom,
+                                onClick = { onExerciseSelected(exercise) },
+                                onDelete = if (isCustom) {
+                                    {
+                                        customExerciseList.find { it.name == exercise.name }?.let {
+                                            onDeleteCustomExercise(it)
+                                        }
+                                    }
+                                } else null
                             )
                         }
                     }
@@ -229,16 +330,32 @@ fun ExercisePicker(
                 Spacer(modifier = Modifier.height(16.dp))
             }
         }
+        
+        // Create Custom Exercise Dialog
+        if (showCreateDialog) {
+            CreateCustomExerciseDialog(
+                onDismiss = { showCreateDialog = false },
+                onCreate = { customExercise ->
+                    onCreateCustomExercise(customExercise)
+                    showCreateDialog = false
+                }
+            )
+        }
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ExerciseListItem(
     exercise: Exercise,
     isSelected: Boolean,
+    isCustom: Boolean = false,
     onClick: () -> Unit,
+    onDelete: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
+    var showDeleteConfirm by remember { mutableStateOf(false) }
+    
     Surface(
         modifier = modifier
             .fillMaxWidth()
@@ -291,14 +408,31 @@ private fun ExerciseListItem(
             Spacer(modifier = Modifier.width(12.dp))
             
             Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = exercise.name,
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    fontWeight = FontWeight.Medium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = exercise.name,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false)
+                    )
+                    if (isCustom) {
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Surface(
+                            shape = RoundedCornerShape(4.dp),
+                            color = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.2f)
+                        ) {
+                            Text(
+                                text = "Custom",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.tertiary,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+                }
                 
                 Row {
                     Text(
@@ -317,6 +451,21 @@ private fun ExerciseListItem(
                 }
             }
             
+            // Delete button for custom exercises
+            if (isCustom && onDelete != null) {
+                IconButton(
+                    onClick = { showDeleteConfirm = true },
+                    modifier = Modifier.size(32.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Delete,
+                        contentDescription = "Delete",
+                        tint = MaterialTheme.colorScheme.error.copy(alpha = 0.7f),
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
+            
             if (isSelected) {
                 Box(
                     modifier = Modifier
@@ -331,6 +480,439 @@ private fun ExerciseListItem(
                         tint = NeonCyan,
                         modifier = Modifier.size(16.dp)
                     )
+                }
+            }
+        }
+    }
+    
+    // Delete confirmation dialog
+    if (showDeleteConfirm && onDelete != null) {
+        BasicAlertDialog(
+            onDismissRequest = { showDeleteConfirm = false }
+        ) {
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = MaterialTheme.colorScheme.surface
+            ) {
+                Column(modifier = Modifier.padding(24.dp)) {
+                    Text(
+                        text = "Delete Exercise",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = "Are you sure you want to delete \"${exercise.name}\"? This cannot be undone.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(24.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End
+                    ) {
+                        TextButton(onClick = { showDeleteConfirm = false }) {
+                            Text("Cancel")
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        TextButton(
+                            onClick = {
+                                onDelete()
+                                showDeleteConfirm = false
+                            }
+                        ) {
+                            Text("Delete", color = MaterialTheme.colorScheme.error)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Dialog for creating a new custom exercise.
+ */
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@Composable
+private fun CreateCustomExerciseDialog(
+    onDismiss: () -> Unit,
+    onCreate: (CustomExercise) -> Unit
+) {
+    var name by remember { mutableStateOf("") }
+    var selectedMuscle by remember { mutableStateOf("Chest") }
+    var selectedAuxiliaryMuscles by remember { mutableStateOf(setOf<String>()) }
+    var isBodyweight by remember { mutableStateOf(false) }
+    var muscleDropdownExpanded by remember { mutableStateOf(false) }
+    var showAuxiliaryPicker by remember { mutableStateOf(false) }
+    
+    val muscles = ExerciseLibrary.categories
+    val isValid = name.isNotBlank()
+    
+    BasicAlertDialog(
+        onDismissRequest = onDismiss
+    ) {
+        Surface(
+            shape = RoundedCornerShape(20.dp),
+            color = MaterialTheme.colorScheme.surface
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(24.dp)
+            ) {
+                Text(
+                    text = "Create Custom Exercise",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.SemiBold
+                )
+                
+                Spacer(modifier = Modifier.height(20.dp))
+                
+                // Exercise name
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text("Exercise Name") },
+                    placeholder = { Text("e.g., Cable Hammer Curls") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    shape = RoundedCornerShape(12.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = MaterialTheme.colorScheme.primary,
+                        unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
+                    )
+                )
+                
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                // Primary muscle dropdown
+                ExposedDropdownMenuBox(
+                    expanded = muscleDropdownExpanded,
+                    onExpandedChange = { muscleDropdownExpanded = it }
+                ) {
+                    OutlinedTextField(
+                        value = selectedMuscle,
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("Primary Muscle") },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = muscleDropdownExpanded) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .menuAnchor(),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = MaterialTheme.colorScheme.primary,
+                            unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
+                        )
+                    )
+                    
+                    ExposedDropdownMenu(
+                        expanded = muscleDropdownExpanded,
+                        onDismissRequest = { muscleDropdownExpanded = false }
+                    ) {
+                        muscles.forEach { muscle ->
+                            DropdownMenuItem(
+                                text = { Text(muscle) },
+                                onClick = {
+                                    selectedMuscle = muscle
+                                    // Remove from auxiliary if selected as primary
+                                    selectedAuxiliaryMuscles = selectedAuxiliaryMuscles - muscle
+                                    muscleDropdownExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+                
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                // Auxiliary muscles section
+                Text(
+                    text = "Auxiliary Muscles (Optional)",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                // Selected auxiliary muscles display / add button
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                    onClick = { showAuxiliaryPicker = true }
+                ) {
+                    if (selectedAuxiliaryMuscles.isEmpty()) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Add,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Add auxiliary muscles",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    } else {
+                        Column(
+                            modifier = Modifier.padding(12.dp)
+                        ) {
+                            // Display selected muscles as chips
+                            FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                selectedAuxiliaryMuscles.forEach { muscle ->
+                                    AuxiliaryMuscleChip(
+                                        muscle = muscle,
+                                        onRemove = {
+                                            selectedAuxiliaryMuscles = selectedAuxiliaryMuscles - muscle
+                                        }
+                                    )
+                                }
+                                // Add more button
+                                Surface(
+                                    shape = RoundedCornerShape(16.dp),
+                                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
+                                    onClick = { showAuxiliaryPicker = true }
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Add,
+                                            contentDescription = "Add more",
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(
+                                            text = "Add",
+                                            style = MaterialTheme.typography.labelMedium,
+                                            color = MaterialTheme.colorScheme.primary
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                // Bodyweight toggle
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { isBodyweight = !isBodyweight }
+                        .padding(vertical = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Bodyweight Exercise",
+                        style = MaterialTheme.typography.bodyLarge
+                    )
+                    androidx.compose.material3.Switch(
+                        checked = isBodyweight,
+                        onCheckedChange = { isBodyweight = it }
+                    )
+                }
+                
+                Spacer(modifier = Modifier.height(24.dp))
+                
+                // Buttons
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    TextButton(onClick = onDismiss) {
+                        Text("Cancel")
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    TextButton(
+                        onClick = {
+                            if (isValid) {
+                                onCreate(
+                                    CustomExercise(
+                                        name = name.trim(),
+                                        primaryMuscle = selectedMuscle,
+                                        auxiliaryMuscles = selectedAuxiliaryMuscles.joinToString(","),
+                                        isBodyweight = isBodyweight
+                                    )
+                                )
+                            }
+                        },
+                        enabled = isValid
+                    ) {
+                        Text("Create")
+                    }
+                }
+            }
+        }
+    }
+    
+    // Auxiliary muscle picker dialog
+    if (showAuxiliaryPicker) {
+        AuxiliaryMusclePickerDialog(
+            availableMuscles = muscles.filter { it != selectedMuscle },
+            selectedMuscles = selectedAuxiliaryMuscles,
+            onDismiss = { showAuxiliaryPicker = false },
+            onConfirm = { selected ->
+                selectedAuxiliaryMuscles = selected
+                showAuxiliaryPicker = false
+            }
+        )
+    }
+}
+
+@Composable
+private fun AuxiliaryMuscleChip(
+    muscle: String,
+    onRemove: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.secondaryContainer
+    ) {
+        Row(
+            modifier = Modifier.padding(start = 12.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = muscle,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSecondaryContainer
+            )
+            IconButton(
+                onClick = onRemove,
+                modifier = Modifier.size(24.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Close,
+                    contentDescription = "Remove $muscle",
+                    tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AuxiliaryMusclePickerDialog(
+    availableMuscles: List<String>,
+    selectedMuscles: Set<String>,
+    onDismiss: () -> Unit,
+    onConfirm: (Set<String>) -> Unit
+) {
+    var localSelection by remember { mutableStateOf(selectedMuscles) }
+    
+    BasicAlertDialog(
+        onDismissRequest = onDismiss
+    ) {
+        Surface(
+            shape = RoundedCornerShape(20.dp),
+            color = MaterialTheme.colorScheme.surface
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(24.dp)
+            ) {
+                Text(
+                    text = "Select Auxiliary Muscles",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold
+                )
+                
+                Text(
+                    text = "Muscles that assist in the movement",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                // Scrollable list of muscle checkboxes
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(300.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    items(availableMuscles) { muscle ->
+                        val isSelected = localSelection.contains(muscle)
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(8.dp),
+                            color = if (isSelected) {
+                                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+                            } else {
+                                Color.Transparent
+                            },
+                            onClick = {
+                                localSelection = if (isSelected) {
+                                    localSelection - muscle
+                                } else {
+                                    localSelection + muscle
+                                }
+                            }
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Checkbox(
+                                    checked = isSelected,
+                                    onCheckedChange = { checked ->
+                                        localSelection = if (checked) {
+                                            localSelection + muscle
+                                        } else {
+                                            localSelection - muscle
+                                        }
+                                    }
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = muscle,
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
+                            }
+                        }
+                    }
+                }
+                
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                // Buttons
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    TextButton(onClick = onDismiss) {
+                        Text("Cancel")
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    TextButton(onClick = { onConfirm(localSelection) }) {
+                        Text("Done (${localSelection.size})")
+                    }
                 }
             }
         }

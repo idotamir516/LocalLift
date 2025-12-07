@@ -43,19 +43,26 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.workout.app.WorkoutApp
+import com.workout.app.data.entities.CustomExercise
 import com.workout.app.data.entities.TemplateExercise
 import com.workout.app.data.entities.TemplateSet
 import com.workout.app.data.entities.WorkoutTemplate
 import com.workout.app.ui.components.ExercisePicker
 import com.workout.app.ui.screens.ActiveWorkoutScreen
 import com.workout.app.ui.screens.ActiveWorkoutState
+import com.workout.app.ui.screens.EditWorkoutScreen
+import com.workout.app.ui.screens.EditableExerciseLog
+import com.workout.app.ui.screens.EditableSetLog
 import com.workout.app.ui.screens.EditableExercise
 import com.workout.app.ui.screens.EditableTemplateSet
 import com.workout.app.ui.screens.HistoryScreen
+import com.workout.app.ui.screens.ProgramAnalyzerScreen
+import com.workout.app.ui.screens.SettingsScreen
 import com.workout.app.ui.screens.StartWorkoutScreen
 import com.workout.app.ui.screens.TemplateEditorScreen
 import com.workout.app.ui.screens.TemplatesScreen
 import com.workout.app.ui.screens.WorkoutDetailScreen
+import com.workout.app.util.SettingsManager
 import com.workout.app.util.WorkoutExporter
 import kotlinx.coroutines.launch
 
@@ -78,6 +85,11 @@ sealed class Screen(val route: String) {
     object WorkoutDetail : Screen("workout_detail/{sessionId}") {
         fun createRoute(sessionId: Long) = "workout_detail/$sessionId"
     }
+    object EditWorkout : Screen("edit_workout/{sessionId}") {
+        fun createRoute(sessionId: Long) = "edit_workout/$sessionId"
+    }
+    object ProgramAnalyzer : Screen("program_analyzer")
+    object Settings : Screen("settings")
 }
 
 /**
@@ -117,6 +129,7 @@ fun AppNavigation() {
     val context = LocalContext.current
     val application = context.applicationContext as Application
     val database = remember { WorkoutApp.getDatabase(application) }
+    val settingsManager = remember { SettingsManager.getInstance(context) }
     val scope = rememberCoroutineScope()
     
     // Get data from database
@@ -240,6 +253,37 @@ fun AppNavigation() {
                                 database.templateDao().deleteTemplate(template.template)
                             }
                         }
+                    },
+                    onOpenSettings = {
+                        navController.navigate(Screen.Settings.route)
+                    },
+                    onOpenAnalyzer = {
+                        navController.navigate(Screen.ProgramAnalyzer.route)
+                    }
+                )
+            }
+            
+            // Settings screen
+            composable(Screen.Settings.route) {
+                SettingsScreen(
+                    settingsManager = settingsManager,
+                    onNavigateBack = {
+                        navController.popBackStack()
+                    }
+                )
+            }
+            
+            // Program Analyzer screen
+            composable(Screen.ProgramAnalyzer.route) {
+                ProgramAnalyzerScreen(
+                    templates = templates,
+                    customExercises = database.customExerciseDao().getAllCustomExercises(),
+                    settingsManager = settingsManager,
+                    onLoadFullTemplate = { templateId ->
+                        database.templateDao().getFullTemplateWithExercisesAndSets(templateId)
+                    },
+                    onBack = {
+                        navController.popBackStack()
                     }
                 )
             }
@@ -386,7 +430,18 @@ fun AppNavigation() {
                     onExerciseSelected = { exercise ->
                         workoutState.addExercise(exercise)
                     },
-                    selectedExercises = exercises.map { it.exerciseName }
+                    selectedExercises = exercises.map { it.exerciseName },
+                    customExercises = database.customExerciseDao().getAllCustomExercises(),
+                    onCreateCustomExercise = { customExercise ->
+                        scope.launch {
+                            database.customExerciseDao().insertCustomExercise(customExercise)
+                        }
+                    },
+                    onDeleteCustomExercise = { customExercise ->
+                        scope.launch {
+                            database.customExerciseDao().deleteCustomExercise(customExercise)
+                        }
+                    }
                 )
             }
             
@@ -450,6 +505,7 @@ fun AppNavigation() {
                         templateId = templateId,
                         initialName = loadedTemplateName,
                         initialExercises = loadedExercises!!,
+                        settingsManager = settingsManager,
                         onSave = { name, exercises ->
                             scope.launch {
                                 if (templateId != null) {
@@ -522,7 +578,18 @@ fun AppNavigation() {
                                 navController.popBackStack()
                             }
                         },
-                        onBack = { navController.popBackStack() }
+                        onBack = { navController.popBackStack() },
+                        customExercises = database.customExerciseDao().getAllCustomExercises(),
+                        onCreateCustomExercise = { customExercise ->
+                            scope.launch {
+                                database.customExerciseDao().insertCustomExercise(customExercise)
+                            }
+                        },
+                        onDeleteCustomExercise = { customExercise ->
+                            scope.launch {
+                                database.customExerciseDao().deleteCustomExercise(customExercise)
+                            }
+                        }
                     )
                 }
             }
@@ -542,15 +609,34 @@ fun AppNavigation() {
                 WorkoutDetailScreen(
                     sessionWithDetails = sessionWithDetails,
                     onBack = { navController.popBackStack() },
-                    onSaveAsTemplate = {
+                    onEdit = {
+                        navController.navigate(Screen.EditWorkout.createRoute(sessionId))
+                    },
+                    onCheckTemplateName = { name ->
+                        database.templateDao().getTemplateByName(name)?.id
+                    },
+                    onSaveAsTemplate = { templateName, existingTemplateId ->
                         scope.launch {
                             sessionWithDetails?.let { session ->
-                                // Create a new template from the workout
-                                val templateName = session.session.templateName ?: "Workout ${java.text.SimpleDateFormat("MMM d", java.util.Locale.getDefault()).format(java.util.Date(session.session.startedAt))}"
+                                val templateId: Long
                                 
-                                val templateId = database.templateDao().insertTemplate(
-                                    WorkoutTemplate(name = templateName)
-                                )
+                                if (existingTemplateId != null) {
+                                    // Update existing template: delete old exercises/sets and reuse ID
+                                    val existingExercises = database.templateDao().getExercisesForTemplateOnce(existingTemplateId)
+                                    existingExercises.forEach { exercise ->
+                                        database.templateDao().deleteTemplateExercise(exercise)
+                                    }
+                                    // Update the template name in case it changed (unlikely but safe)
+                                    database.templateDao().updateTemplate(
+                                        WorkoutTemplate(id = existingTemplateId, name = templateName)
+                                    )
+                                    templateId = existingTemplateId
+                                } else {
+                                    // Create a new template
+                                    templateId = database.templateDao().insertTemplate(
+                                        WorkoutTemplate(name = templateName)
+                                    )
+                                }
                                 
                                 // Create template exercises and sets from the workout
                                 session.exercises.forEachIndexed { index, exerciseWithSets ->
@@ -579,11 +665,90 @@ fun AppNavigation() {
                                     database.templateDao().insertTemplateSets(templateSets)
                                 }
                                 
-                                // Navigate to template editor to let user customize the name
+                                // Navigate to template editor to let user customize
                                 navController.navigate(Screen.TemplateEditor.createRoute(templateId))
                             }
                         }
                     }
+                )
+            }
+            
+            // Edit workout screen
+            composable(
+                route = Screen.EditWorkout.route,
+                arguments = listOf(
+                    navArgument("sessionId") { type = NavType.LongType }
+                )
+            ) { backStackEntry ->
+                val sessionId = backStackEntry.arguments?.getLong("sessionId") ?: 0L
+                val sessionWithDetails by remember(sessionId) {
+                    database.sessionDao().getSessionWithDetails(sessionId)
+                }.collectAsState(initial = null)
+                
+                EditWorkoutScreen(
+                    sessionWithDetails = sessionWithDetails,
+                    customExercises = database.customExerciseDao().getAllCustomExercises(),
+                    onCreateCustomExercise = { customExercise ->
+                        scope.launch {
+                            database.customExerciseDao().insertCustomExercise(customExercise)
+                        }
+                    },
+                    onDeleteCustomExercise = { customExercise ->
+                        scope.launch {
+                            database.customExerciseDao().deleteCustomExercise(customExercise)
+                        }
+                    },
+                    onSave = { editedExercises, newStartedAt, newCompletedAt ->
+                        scope.launch {
+                            // Update session times
+                            val session = database.sessionDao().getSessionById(sessionId)
+                            if (session != null) {
+                                database.sessionDao().updateSession(
+                                    session.copy(
+                                        startedAt = newStartedAt,
+                                        completedAt = newCompletedAt
+                                    )
+                                )
+                            }
+                            
+                            // Delete all existing exercises and sets (cascade)
+                            val existingExercises = database.sessionDao().getExerciseLogsForSession(sessionId)
+                            existingExercises.forEach { exerciseLog ->
+                                database.sessionDao().deleteExerciseLog(exerciseLog.id)
+                            }
+                            
+                            // Insert updated exercises and sets
+                            editedExercises.forEachIndexed { index, editableExercise ->
+                                val exerciseLogId = database.sessionDao().insertExerciseLog(
+                                    com.workout.app.data.entities.ExerciseLog(
+                                        sessionId = sessionId,
+                                        exerciseName = editableExercise.exerciseName,
+                                        showRpe = editableExercise.showRpe,
+                                        orderIndex = index
+                                    )
+                                )
+                                
+                                // Insert sets for this exercise
+                                val setLogs = editableExercise.sets.map { editableSet ->
+                                    com.workout.app.data.entities.SetLog(
+                                        exerciseLogId = exerciseLogId,
+                                        setNumber = editableSet.setNumber,
+                                        reps = editableSet.reps,
+                                        weightLbs = editableSet.weightLbs,
+                                        restSeconds = editableSet.restSeconds,
+                                        rpe = editableSet.rpe,
+                                        setType = editableSet.setType,
+                                        completedAt = editableSet.completedAt ?: System.currentTimeMillis()
+                                    )
+                                }
+                                database.sessionDao().insertSetLogs(setLogs)
+                            }
+                            
+                            // Navigate back to workout detail
+                            navController.popBackStack()
+                        }
+                    },
+                    onBack = { navController.popBackStack() }
                 )
             }
         }

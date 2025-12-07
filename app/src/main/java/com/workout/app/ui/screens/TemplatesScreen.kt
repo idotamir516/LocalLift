@@ -20,8 +20,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Analytics
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.outlined.FitnessCenter
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -70,7 +72,9 @@ fun TemplatesScreen(
     templates: Flow<List<TemplateWithExercises>> = flowOf(emptyList()),
     onCreateTemplate: () -> Unit = {},
     onEditTemplate: (templateId: Long) -> Unit = {},
-    onDeleteTemplate: (templateId: Long) -> Unit = {}
+    onDeleteTemplate: (templateId: Long) -> Unit = {},
+    onOpenSettings: () -> Unit = {},
+    onOpenAnalyzer: () -> Unit = {}
 ) {
     val templateList by templates.collectAsState(initial = emptyList())
     var templateToDelete by remember { mutableStateOf<TemplateWithExercises?>(null) }
@@ -87,6 +91,20 @@ fun TemplatesScreen(
                             fontWeight = FontWeight.Bold
                         )
                     ) 
+                },
+                actions = {
+                    IconButton(onClick = onOpenAnalyzer) {
+                        Icon(
+                            imageVector = Icons.Default.Analytics,
+                            contentDescription = "Analyze Program"
+                        )
+                    }
+                    IconButton(onClick = onOpenSettings) {
+                        Icon(
+                            imageVector = Icons.Default.Settings,
+                            contentDescription = "Settings"
+                        )
+                    }
                 },
                 scrollBehavior = scrollBehavior,
                 colors = TopAppBarDefaults.largeTopAppBarColors(

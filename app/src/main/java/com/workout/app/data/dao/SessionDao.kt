@@ -10,6 +10,7 @@ import androidx.room.Transaction
 import androidx.room.Update
 import com.workout.app.data.entities.ExerciseLog
 import com.workout.app.data.entities.SetLog
+import com.workout.app.data.entities.SetType
 import com.workout.app.data.entities.WorkoutSession
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -165,4 +166,62 @@ interface SessionDao {
             )
         )
     }
+    
+    /**
+     * Data class to hold previous set information for display.
+     */
+    data class PreviousSetData(
+        val exerciseName: String,
+        val setNumber: Int,
+        val setType: SetType,
+        val weightLbs: Float?,
+        val reps: Int?
+    )
+    
+    /**
+     * Get previous set data for an exercise from the last workout using the same template.
+     * Matches by exercise name, set number, and set type.
+     * 
+     * @param templateId The template ID to match
+     * @param exerciseName The exercise name to find
+     * @param currentSessionId The current session ID to exclude
+     */
+    @Query("""
+        SELECT el.exerciseName, sl.setNumber, sl.setType, sl.weightLbs, sl.reps
+        FROM set_logs sl
+        INNER JOIN exercise_logs el ON sl.exerciseLogId = el.id
+        INNER JOIN workout_sessions ws ON el.sessionId = ws.id
+        WHERE ws.templateId = :templateId
+          AND el.exerciseName = :exerciseName
+          AND ws.isCompleted = 1
+          AND ws.id != :currentSessionId
+        ORDER BY ws.completedAt DESC
+    """)
+    suspend fun getPreviousSetsForExerciseByTemplate(
+        templateId: Long,
+        exerciseName: String,
+        currentSessionId: Long
+    ): List<PreviousSetData>
+    
+    /**
+     * Get previous set data for an exercise from any workout (any template).
+     * Matches by exercise name, set number, and set type.
+     * 
+     * @param exerciseName The exercise name to find
+     * @param currentSessionId The current session ID to exclude
+     */
+    @Query("""
+        SELECT el.exerciseName, sl.setNumber, sl.setType, sl.weightLbs, sl.reps
+        FROM set_logs sl
+        INNER JOIN exercise_logs el ON sl.exerciseLogId = el.id
+        INNER JOIN workout_sessions ws ON el.sessionId = ws.id
+        WHERE el.exerciseName = :exerciseName
+          AND ws.isCompleted = 1
+          AND ws.id != :currentSessionId
+        ORDER BY ws.completedAt DESC
+    """)
+    suspend fun getPreviousSetsForExerciseAny(
+        exerciseName: String,
+        currentSessionId: Long
+    ): List<PreviousSetData>
 }

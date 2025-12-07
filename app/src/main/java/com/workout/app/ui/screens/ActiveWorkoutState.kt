@@ -8,6 +8,8 @@ import com.workout.app.data.entities.ExerciseLog
 import com.workout.app.data.entities.SetLog
 import com.workout.app.data.entities.WorkoutSession
 import com.workout.app.util.AudioPlayer
+import com.workout.app.util.PreviousLiftSource
+import com.workout.app.util.SettingsManager
 import com.workout.app.util.TimerManager
 import com.workout.app.util.TimerState
 import kotlinx.coroutines.CoroutineScope
@@ -36,6 +38,7 @@ class ActiveWorkoutState(
     val showExercisePicker: StateFlow<Boolean> = _showExercisePicker.asStateFlow()
     
     private val audioPlayer = AudioPlayer(context)
+    private val settingsManager = SettingsManager.getInstance(context)
     
     private val timerManager = TimerManager(scope) {
         // Play sound when timer completes
@@ -54,14 +57,42 @@ class ActiveWorkoutState(
             if (sessionWithDetails != null) {
                 _session.value = sessionWithDetails.session
                 
+                // Determine how to fetch previous lift data based on settings
+                val previousLiftSource = settingsManager.getPreviousLiftSourceSync()
+                val templateId = sessionWithDetails.session.templateId
+                
                 // Convert to ActiveExercise format
                 _exercises.value = sessionWithDetails.exercises.map { exerciseWithSets ->
+                    val exerciseName = exerciseWithSets.exerciseLog.exerciseName
+                    
+                    // Load previous set data for this exercise
+                    val previousSets = when {
+                        previousLiftSource == PreviousLiftSource.BY_TEMPLATE && templateId != null -> {
+                            database.sessionDao().getPreviousSetsForExerciseByTemplate(
+                                templateId = templateId,
+                                exerciseName = exerciseName,
+                                currentSessionId = sessionId
+                            )
+                        }
+                        else -> {
+                            database.sessionDao().getPreviousSetsForExerciseAny(
+                                exerciseName = exerciseName,
+                                currentSessionId = sessionId
+                            )
+                        }
+                    }
+                    
                     ActiveExercise(
                         exerciseLog = exerciseWithSets.exerciseLog,
-                        exerciseName = exerciseWithSets.exerciseLog.exerciseName,
+                        exerciseName = exerciseName,
                         restSeconds = exerciseWithSets.sets.firstOrNull()?.restSeconds,
                         showRpe = exerciseWithSets.exerciseLog.showRpe,
-                        sets = exerciseWithSets.sets.sortedBy { it.setNumber }.mapIndexed { index, setLog ->
+                        sets = exerciseWithSets.sets.sortedBy { it.setNumber }.map { setLog ->
+                            // Find matching previous set (same set number and set type)
+                            val matchingPreviousSet = previousSets.find { prev ->
+                                prev.setNumber == setLog.setNumber && prev.setType == setLog.setType
+                            }
+                            
                             ActiveSet(
                                 setLog = setLog,
                                 setNumber = setLog.setNumber,
@@ -69,8 +100,8 @@ class ActiveWorkoutState(
                                 reps = setLog.reps,
                                 rpe = setLog.rpe,
                                 isCompleted = setLog.completedAt != null,
-                                previousWeight = null, // TODO: Load from previous session
-                                previousReps = null,
+                                previousWeight = matchingPreviousSet?.weightLbs?.toInt(),
+                                previousReps = matchingPreviousSet?.reps,
                                 restSeconds = setLog.restSeconds,
                                 setType = setLog.setType
                             )
@@ -361,21 +392,27 @@ class ActiveWorkoutState(
             val currentExercises = _exercises.value.toMutableList()
             val newOrderIndex = currentExercises.size
             
+            // Get defaults from settings
+            val defaultRestSeconds = settingsManager.getDefaultRestSecondsSync()
+            val defaultSets = settingsManager.getDefaultSetsPerExerciseSync()
+            val defaultShowRpe = settingsManager.getShowRpeByDefaultSync()
+            
             // Create exercise log in database
             val exerciseLog = ExerciseLog(
                 sessionId = sessionId,
                 exerciseName = exercise.name,
-                orderIndex = newOrderIndex
+                orderIndex = newOrderIndex,
+                showRpe = defaultShowRpe
             )
             val exerciseLogId = database.sessionDao().insertExerciseLog(exerciseLog)
             
-            // Create default 3 sets
+            // Create default sets based on settings
             val setLogs = mutableListOf<ActiveSet>()
-            repeat(3) { setIndex ->
+            repeat(defaultSets) { setIndex ->
                 val setLog = SetLog(
                     exerciseLogId = exerciseLogId,
                     setNumber = setIndex + 1,
-                    restSeconds = 90 // Default rest time
+                    restSeconds = defaultRestSeconds
                 )
                 val setId = database.sessionDao().insertSetLog(setLog)
                 setLogs.add(
@@ -385,7 +422,7 @@ class ActiveWorkoutState(
                         weight = null,
                         reps = null,
                         isCompleted = false,
-                        restSeconds = 90 // Match the SetLog rest time
+                        restSeconds = defaultRestSeconds
                     )
                 )
             }
@@ -394,7 +431,8 @@ class ActiveWorkoutState(
             val newExercise = ActiveExercise(
                 exerciseLog = exerciseLog.copy(id = exerciseLogId),
                 exerciseName = exercise.name,
-                restSeconds = 90,
+                restSeconds = defaultRestSeconds,
+                showRpe = defaultShowRpe,
                 sets = setLogs,
                 isExpanded = true
             )
