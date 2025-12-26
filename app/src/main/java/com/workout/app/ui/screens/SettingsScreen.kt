@@ -1,7 +1,10 @@
 package com.workout.app.ui.screens
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -9,13 +12,17 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -36,9 +43,13 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.workout.app.ui.theme.AppTheme
+import com.workout.app.ui.theme.getAccentColorForTheme
 import com.workout.app.util.PreviousLiftSource
 import com.workout.app.util.SettingsManager
 
@@ -49,7 +60,8 @@ import com.workout.app.util.SettingsManager
 @Composable
 fun SettingsScreen(
     settingsManager: SettingsManager,
-    onNavigateBack: () -> Unit = {}
+    onNavigateBack: () -> Unit = {},
+    onNavigateToTrainingPhases: () -> Unit = {}
 ) {
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     
@@ -59,10 +71,13 @@ fun SettingsScreen(
     val showRpeByDefault by settingsManager.showRpeByDefault.collectAsState()
     val timerSoundEnabled by settingsManager.timerSoundEnabled.collectAsState()
     val timerVibrationEnabled by settingsManager.timerVibrationEnabled.collectAsState()
+    val timerStartsMinimized by settingsManager.timerStartsMinimized.collectAsState()
     val previousLiftSource by settingsManager.previousLiftSource.collectAsState()
     val countWarmupAsEffective by settingsManager.countWarmupAsEffective.collectAsState()
     val countDropSetAsEffective by settingsManager.countDropSetAsEffective.collectAsState()
     val estimatedSecondsPerSet by settingsManager.estimatedSecondsPerSet.collectAsState()
+    val appTheme by settingsManager.appTheme.collectAsState()
+    val vibrantColors by settingsManager.vibrantColors.collectAsState()
     
     Scaffold(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
@@ -101,6 +116,27 @@ fun SettingsScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            // Appearance Section
+            SettingsSection(title = "Appearance") {
+                ThemeSelectionRow(
+                    selectedTheme = appTheme,
+                    vibrantColors = vibrantColors,
+                    onThemeSelected = { settingsManager.setAppTheme(it) }
+                )
+                
+                HorizontalDivider(
+                    modifier = Modifier.padding(vertical = 12.dp),
+                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                )
+                
+                SwitchSettingRow(
+                    label = "Vibrant Colors",
+                    description = "Use bright neon colors instead of muted tones",
+                    checked = vibrantColors,
+                    onCheckedChange = { settingsManager.setVibrantColors(it) }
+                )
+            }
+            
             // Exercise Defaults Section
             SettingsSection(title = "Exercise Defaults") {
                 // Default Rest Time
@@ -178,6 +214,19 @@ fun SettingsScreen(
                     checked = timerVibrationEnabled,
                     onCheckedChange = { settingsManager.setTimerVibrationEnabled(it) }
                 )
+                
+                HorizontalDivider(
+                    modifier = Modifier.padding(vertical = 8.dp),
+                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                )
+                
+                // Timer Starts Minimized
+                SwitchSettingRow(
+                    label = "Start Timer Minimized",
+                    description = "Show compact timer view after completing a set",
+                    checked = timerStartsMinimized,
+                    onCheckedChange = { settingsManager.setTimerStartsMinimized(it) }
+                )
             }
             
             // Workout Display Section
@@ -236,6 +285,15 @@ fun SettingsScreen(
                     ),
                     selectedOption = estimatedSecondsPerSet,
                     onOptionSelected = { settingsManager.setEstimatedSecondsPerSet(it) }
+                )
+            }
+            
+            // Training Section
+            SettingsSection(title = "Training") {
+                NavigationSettingRow(
+                    label = "Training Phases",
+                    description = "Track bulk, cut, maintenance phases",
+                    onClick = onNavigateToTrainingPhases
                 )
             }
             
@@ -449,5 +507,176 @@ private fun formatRestTime(seconds: Int): String {
         if (secs > 0) "${minutes}m ${secs}s" else "${minutes}m"
     } else {
         "${secs}s"
+    }
+}
+
+@Composable
+private fun NavigationSettingRow(
+    label: String,
+    description: String? = null,
+    onClick: () -> Unit
+) {
+    Surface(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        color = Color.Transparent
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 4.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(
+                modifier = Modifier.weight(1f)
+            ) {
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                if (description != null) {
+                    Text(
+                        text = description,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+            
+            Icon(
+                imageVector = Icons.Default.ChevronRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@Composable
+private fun ThemeSelectionRow(
+    selectedTheme: AppTheme,
+    vibrantColors: Boolean,
+    onThemeSelected: (AppTheme) -> Unit
+) {
+    Column(
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Text(
+            text = "Color Theme",
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+        Text(
+            text = "Choose your preferred app color scheme",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(bottom = 16.dp)
+        )
+        
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceEvenly
+        ) {
+            ThemeColorOption(
+                color = getAccentColorForTheme(AppTheme.CYAN, vibrantColors),
+                label = "Cyan",
+                isSelected = selectedTheme == AppTheme.CYAN,
+                onClick = { onThemeSelected(AppTheme.CYAN) }
+            )
+            ThemeColorOption(
+                color = getAccentColorForTheme(AppTheme.BLUE, vibrantColors),
+                label = "Blue",
+                isSelected = selectedTheme == AppTheme.BLUE,
+                onClick = { onThemeSelected(AppTheme.BLUE) }
+            )
+            ThemeColorOption(
+                color = getAccentColorForTheme(AppTheme.PURPLE, vibrantColors),
+                label = "Purple",
+                isSelected = selectedTheme == AppTheme.PURPLE,
+                onClick = { onThemeSelected(AppTheme.PURPLE) }
+            )
+            ThemeColorOption(
+                color = getAccentColorForTheme(AppTheme.PINK, vibrantColors),
+                label = "Pink",
+                isSelected = selectedTheme == AppTheme.PINK,
+                onClick = { onThemeSelected(AppTheme.PINK) }
+            )
+        }
+        
+        Spacer(modifier = Modifier.height(12.dp))
+        
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceEvenly
+        ) {
+            ThemeColorOption(
+                color = getAccentColorForTheme(AppTheme.GREEN, vibrantColors),
+                label = "Green",
+                isSelected = selectedTheme == AppTheme.GREEN,
+                onClick = { onThemeSelected(AppTheme.GREEN) }
+            )
+            ThemeColorOption(
+                color = getAccentColorForTheme(AppTheme.ORANGE, vibrantColors),
+                label = "Orange",
+                isSelected = selectedTheme == AppTheme.ORANGE,
+                onClick = { onThemeSelected(AppTheme.ORANGE) }
+            )
+            ThemeColorOption(
+                color = getAccentColorForTheme(AppTheme.RED, vibrantColors),
+                label = "Red",
+                isSelected = selectedTheme == AppTheme.RED,
+                onClick = { onThemeSelected(AppTheme.RED) }
+            )
+        }
+    }
+}
+
+@Composable
+private fun ThemeColorOption(
+    color: Color,
+    label: String,
+    isSelected: Boolean,
+    onClick: () -> Unit
+) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.clickable { onClick() }
+    ) {
+        Box(
+            modifier = Modifier
+                .size(48.dp)
+                .clip(CircleShape)
+                .background(color)
+                .then(
+                    if (isSelected) {
+                        Modifier.border(3.dp, MaterialTheme.colorScheme.onBackground, CircleShape)
+                    } else {
+                        Modifier
+                    }
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            if (isSelected) {
+                Icon(
+                    imageVector = Icons.Default.Check,
+                    contentDescription = "Selected",
+                    tint = Color.White,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
+        }
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodySmall,
+            color = if (isSelected) {
+                MaterialTheme.colorScheme.primary
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            },
+            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
+        )
     }
 }

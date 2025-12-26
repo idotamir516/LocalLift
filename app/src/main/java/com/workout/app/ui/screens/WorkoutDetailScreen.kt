@@ -59,7 +59,6 @@ import com.workout.app.data.dao.SessionWithDetails
 import com.workout.app.data.entities.SetLog
 import com.workout.app.data.entities.WorkoutSession
 import com.workout.app.ui.theme.DarkBackground
-import com.workout.app.ui.theme.NeonCyan
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -228,9 +227,9 @@ fun WorkoutDetailScreen(
                         singleLine = true,
                         enabled = !showDuplicateWarning,
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = NeonCyan,
-                            focusedLabelColor = NeonCyan,
-                            cursorColor = NeonCyan
+                            focusedBorderColor = MaterialTheme.colorScheme.primary,
+                            focusedLabelColor = MaterialTheme.colorScheme.primary,
+                            cursorColor = MaterialTheme.colorScheme.primary
                         ),
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -245,7 +244,7 @@ fun WorkoutDetailScreen(
                             showDuplicateWarning = false
                         },
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = NeonCyan
+                            containerColor = MaterialTheme.colorScheme.primary
                         )
                     ) {
                         Text("Update Template", color = DarkBackground)
@@ -271,7 +270,7 @@ fun WorkoutDetailScreen(
                         },
                         enabled = templateName.isNotBlank() && !isCheckingName,
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = NeonCyan
+                            containerColor = MaterialTheme.colorScheme.primary
                         )
                     ) {
                         Text(if (isCheckingName) "Checking..." else "Save", color = DarkBackground)
@@ -290,7 +289,7 @@ fun WorkoutDetailScreen(
                 ) {
                     Text(
                         text = if (showDuplicateWarning) "Change Name" else "Cancel",
-                        color = NeonCyan
+                        color = MaterialTheme.colorScheme.primary
                     )
                 }
             },
@@ -338,8 +337,8 @@ private fun WorkoutSummaryCard(
                     .background(
                         Brush.horizontalGradient(
                             colors = listOf(
-                                NeonCyan.copy(alpha = 0.15f),
-                                NeonCyan.copy(alpha = 0.05f)
+                                MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                                MaterialTheme.colorScheme.primary.copy(alpha = 0.05f)
                             )
                         )
                     )
@@ -357,13 +356,13 @@ private fun WorkoutSummaryCard(
                         modifier = Modifier
                             .size(40.dp)
                             .clip(CircleShape)
-                            .background(NeonCyan.copy(alpha = 0.2f)),
+                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             imageVector = Icons.Default.CalendarToday,
                             contentDescription = null,
-                            tint = NeonCyan,
+                            tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(20.dp)
                         )
                     }
@@ -418,7 +417,7 @@ private fun WorkoutSummaryCard(
                         Icon(
                             imageVector = Icons.Default.Timer,
                             contentDescription = null,
-                            tint = NeonCyan,
+                            tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier
                                 .padding(end = 4.dp)
                                 .size(18.dp)
@@ -432,7 +431,7 @@ private fun WorkoutSummaryCard(
                             Text(
                                 text = duration,
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = NeonCyan,
+                                color = MaterialTheme.colorScheme.primary,
                                 fontWeight = FontWeight.SemiBold
                             )
                         }
@@ -507,13 +506,13 @@ private fun ExerciseDetailCard(
                     modifier = Modifier
                         .size(28.dp)
                         .clip(CircleShape)
-                        .background(NeonCyan.copy(alpha = 0.2f)),
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = Icons.Default.Check,
                         contentDescription = null,
-                        tint = NeonCyan,
+                        tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(16.dp)
                     )
                 }
@@ -584,13 +583,13 @@ private fun SetDetailRow(
                 modifier = Modifier
                     .size(24.dp)
                     .clip(CircleShape)
-                    .background(NeonCyan.copy(alpha = 0.2f)),
+                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
                     text = "${set.setNumber}",
                     style = MaterialTheme.typography.labelSmall,
-                    color = NeonCyan,
+                    color = MaterialTheme.colorScheme.primary,
                     fontWeight = FontWeight.Bold
                 )
             }

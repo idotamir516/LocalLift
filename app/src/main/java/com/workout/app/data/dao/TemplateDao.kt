@@ -54,6 +54,16 @@ interface TemplateDao {
     @Query("SELECT * FROM workout_templates ORDER BY name ASC")
     fun getAllTemplates(): Flow<List<TemplateWithExercises>>
     
+    // Get templates in a specific folder
+    @Transaction
+    @Query("SELECT * FROM workout_templates WHERE folderId = :folderId ORDER BY name ASC")
+    fun getTemplatesInFolder(folderId: Long): Flow<List<TemplateWithExercises>>
+    
+    // Get templates without a folder (root level)
+    @Transaction
+    @Query("SELECT * FROM workout_templates WHERE folderId IS NULL ORDER BY name ASC")
+    fun getTemplatesWithoutFolder(): Flow<List<TemplateWithExercises>>
+    
     // Get single template with exercises as Flow
     @Transaction
     @Query("SELECT * FROM workout_templates WHERE id = :templateId")
@@ -150,6 +160,10 @@ interface TemplateDao {
     // Delete all exercises for a template
     @Query("DELETE FROM template_exercises WHERE templateId = :templateId")
     suspend fun deleteExercisesForTemplate(templateId: Long)
+    
+    // Move template to a folder
+    @Query("UPDATE workout_templates SET folderId = :folderId, updatedAt = :updatedAt WHERE id = :templateId")
+    suspend fun moveTemplateToFolder(templateId: Long, folderId: Long?, updatedAt: Long = System.currentTimeMillis())
     
     // Transaction: Save template with exercises
     @Transaction

@@ -1,5 +1,8 @@
 package com.workout.app.ui.screens
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -21,6 +24,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.FitnessCenter
+import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.outlined.FitnessCenter
 import androidx.compose.material3.Card
@@ -37,6 +42,8 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -46,15 +53,18 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.workout.app.data.dao.TemplateWithExercises
+import com.workout.app.data.entities.WorkoutFolder
 import com.workout.app.data.entities.WorkoutSession
+import com.workout.app.ui.components.parseColorHex
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 
 /**
- * Start Workout screen - displays available templates and allows starting a workout.
+ * Start Workout screen - displays available templates organized by folders and allows starting a workout.
  * Shows a resume banner if there's an in-progress workout.
  * 
  * @param templates Flow of templates with their exercises
+ * @param folders Flow of folders
  * @param activeSession Currently active (in-progress) session, if any
  * @param onStartWorkout Callback when user selects a template to start
  * @param onResumeWorkout Callback when user wants to resume active workout
@@ -64,6 +74,7 @@ import kotlinx.coroutines.flow.flowOf
 @Composable
 fun StartWorkoutScreen(
     templates: Flow<List<TemplateWithExercises>> = flowOf(emptyList()),
+    folders: Flow<List<WorkoutFolder>> = flowOf(emptyList()),
     activeSession: WorkoutSession? = null,
     onStartWorkout: (templateId: Long) -> Unit = {},
     onStartEmptyWorkout: () -> Unit = {},
@@ -71,7 +82,13 @@ fun StartWorkoutScreen(
     onCreateTemplate: () -> Unit = {}
 ) {
     val templateList by templates.collectAsState(initial = emptyList())
+    val folderList by folders.collectAsState(initial = emptyList())
+    val expandedFolders = remember { mutableStateMapOf<Long, Boolean>() }
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+    
+    // Group templates by folder
+    val templatesByFolder = templateList.groupBy { it.template.folderId }
+    val uncategorizedTemplates = templatesByFolder[null] ?: emptyList()
     
     Scaffold(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
@@ -118,7 +135,7 @@ fun StartWorkoutScreen(
                     EmptyWorkoutCard(onStart = onStartEmptyWorkout)
                 }
                 
-                if (templateList.isEmpty()) {
+                if (templateList.isEmpty() && folderList.isEmpty()) {
                     // Prompt to create templates
                     item {
                         CreateTemplatePrompt(
@@ -127,15 +144,133 @@ fun StartWorkoutScreen(
                         )
                     }
                 } else {
-                    // Template cards
-                    items(templateList) { templateWithExercises ->
-                        TemplateCard(
-                            templateWithExercises = templateWithExercises,
-                            onStart = { onStartWorkout(templateWithExercises.template.id) }
-                        )
+                    // Folders with their templates
+                    items(
+                        items = folderList,
+                        key = { "folder_${it.id}" }
+                    ) { folder ->
+                        val isExpanded = expandedFolders[folder.id] ?: false
+                        val templatesInFolder = templatesByFolder[folder.id] ?: emptyList()
+                        
+                        Column {
+                            FolderCard(
+                                folder = folder,
+                                templateCount = templatesInFolder.size,
+                                isExpanded = isExpanded,
+                                onClick = { expandedFolders[folder.id] = !isExpanded }
+                            )
+                            
+                            // Expanded folder contents
+                            AnimatedVisibility(
+                                visible = isExpanded,
+                                enter = expandVertically(),
+                                exit = shrinkVertically()
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(start = 24.dp, top = 8.dp),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    templatesInFolder.forEach { templateWithExercises ->
+                                        TemplateCard(
+                                            templateWithExercises = templateWithExercises,
+                                            onStart = { onStartWorkout(templateWithExercises.template.id) }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    
+                    // Uncategorized templates
+                    if (uncategorizedTemplates.isNotEmpty()) {
+                        if (folderList.isNotEmpty()) {
+                            item {
+                                Text(
+                                    text = "Uncategorized",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
+                                )
+                            }
+                        }
+                        
+                        items(
+                            items = uncategorizedTemplates,
+                            key = { "template_${it.template.id}" }
+                        ) { templateWithExercises ->
+                            TemplateCard(
+                                templateWithExercises = templateWithExercises,
+                                onStart = { onStartWorkout(templateWithExercises.template.id) }
+                            )
+                        }
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun FolderCard(
+    folder: WorkoutFolder,
+    templateCount: Int,
+    isExpanded: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val folderColor = folder.colorHex?.let { parseColorHex(it) } ?: MaterialTheme.colorScheme.primary
+    
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surface,
+        onClick = onClick
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(folderColor.copy(alpha = 0.15f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = if (isExpanded) Icons.Default.FolderOpen else Icons.Default.Folder,
+                    contentDescription = null,
+                    tint = folderColor,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
+            
+            Spacer(modifier = Modifier.width(14.dp))
+            
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = folder.name,
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontWeight = FontWeight.SemiBold
+                    ),
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                
+                Text(
+                    text = "$templateCount template${if (templateCount != 1) "s" else ""}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            
+            // Expand/collapse indicator
+            Text(
+                text = if (isExpanded) "▼" else "▶",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }

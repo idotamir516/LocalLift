@@ -46,7 +46,6 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.workout.app.data.entities.SetType
-import com.workout.app.ui.theme.NeonCyan
 import com.workout.app.ui.theme.DropSetColor
 import com.workout.app.ui.theme.InputFieldBackground
 import com.workout.app.ui.theme.InputFieldBorder
@@ -81,7 +80,7 @@ fun SetRow(
     previousReps: Int? = null,
     restSeconds: Int? = null,
     setType: SetType = SetType.REGULAR,
-    showRemoveButton: Boolean = false,
+    @Suppress("UNUSED_PARAMETER") showRemoveButton: Boolean = false, // Deprecated - swipe to delete instead
     showRpe: Boolean = false,
     rpe: Float? = null,
     onWeightChange: (Int?) -> Unit,
@@ -90,7 +89,7 @@ fun SetRow(
     onSetTypeChange: (SetType) -> Unit = {},
     onRpeChange: (Float?) -> Unit = {},
     onCompleteClick: () -> Unit,
-    onRemoveClick: () -> Unit = {},
+    @Suppress("UNUSED_PARAMETER") onRemoveClick: () -> Unit = {}, // Deprecated - swipe to delete instead
     modifier: Modifier = Modifier
 ) {
     var showRestPicker by remember { mutableStateOf(false) }
@@ -105,7 +104,7 @@ fun SetRow(
         ) {
             // Set type indicator - clickable to cycle through types
             val (typeText, typeColor) = when (setType) {
-                SetType.REGULAR -> "$displayNumber" to NeonCyan
+                SetType.REGULAR -> "$displayNumber" to MaterialTheme.colorScheme.primary
                 SetType.WARMUP -> "W" to WarmupColor
                 SetType.DROP_SET -> "D" to DropSetColor
             }
@@ -197,12 +196,12 @@ fun SetRow(
                     .size(28.dp)
                     .clip(RoundedCornerShape(6.dp))
                     .background(
-                        if (isCompleted) NeonCyan else Color.Transparent
+                        if (isCompleted) MaterialTheme.colorScheme.primary else Color.Transparent
                     )
                     .border(
                         width = 2.dp,
-                        color = if (isCompleted) NeonCyan 
-                               else if (weight != null && reps != null) NeonCyan.copy(alpha = 0.5f)
+                        color = if (isCompleted) MaterialTheme.colorScheme.primary 
+                               else if (weight != null && reps != null) MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
                                else InputFieldBorder,
                         shape = RoundedCornerShape(6.dp)
                     )
@@ -248,14 +247,14 @@ fun SetRow(
                     Icon(
                         imageVector = Icons.Outlined.Timer,
                         contentDescription = null,
-                        tint = NeonCyan,
+                        tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(14.dp)
                     )
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
                         text = formatRestTime(restSeconds ?: 120),
                         style = MaterialTheme.typography.labelMedium,
-                        color = NeonCyan
+                        color = MaterialTheme.colorScheme.primary
                     )
                 }
             }
@@ -319,7 +318,7 @@ private fun InputField(
             ),
             singleLine = true,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-            cursorBrush = SolidColor(NeonCyan),
+            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 8.dp),
@@ -397,7 +396,7 @@ private fun RpeInputField(
             ),
             singleLine = true,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-            cursorBrush = SolidColor(NeonCyan),
+            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 8.dp),
@@ -422,7 +421,7 @@ private fun RpeInputField(
 }
 
 /**
- * A scrollable rest time picker dialog (like the reference app)
+ * A rest time picker dialog with quick presets and custom option
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -431,23 +430,14 @@ private fun RestTimePicker(
     onTimeSelected: (Int) -> Unit,
     onDismiss: () -> Unit
 ) {
-    // Generate time options from 0:15 to 5:00 in 5-second increments
-    val timeOptions = remember {
-        (15..300 step 5).toList()
-    }
+    // Quick preset options (most common rest times)
+    val presets = listOf(30, 60, 90, 120, 180)
     
-    val listState = rememberLazyListState()
+    var showCustomPicker by remember { mutableStateOf(false) }
     var selectedTime by remember { mutableStateOf(currentSeconds) }
     
-    // Find initial index
-    val initialIndex = remember(currentSeconds) {
-        timeOptions.indexOfFirst { it >= currentSeconds }.coerceAtLeast(0)
-    }
-    
-    LaunchedEffect(Unit) {
-        // Scroll to center the current selection
-        listState.scrollToItem((initialIndex - 3).coerceAtLeast(0))
-    }
+    // Check if current value is a preset or custom
+    val isCustomValue = currentSeconds !in presets
     
     BasicAlertDialog(
         onDismissRequest = onDismiss
@@ -462,7 +452,7 @@ private fun RestTimePicker(
                 modifier = Modifier.padding(24.dp)
             ) {
                 Text(
-                    text = "Inline Rest Time",
+                    text = "Rest Time",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurface
@@ -470,65 +460,215 @@ private fun RestTimePicker(
                 
                 Spacer(modifier = Modifier.height(20.dp))
                 
-                // Scrollable time list
-                Box(
-                    modifier = Modifier
-                        .height(200.dp)
-                        .fillMaxWidth()
-                ) {
-                    LazyColumn(
-                        state = listState,
-                        horizontalAlignment = Alignment.CenterHorizontally,
+                if (showCustomPicker) {
+                    // Custom time picker with scrollable list
+                    CustomTimePicker(
+                        currentSeconds = selectedTime,
+                        onTimeSelected = { time ->
+                            selectedTime = time
+                        }
+                    )
+                    
+                    Spacer(modifier = Modifier.height(16.dp))
+                    
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        // Back button
+                        Surface(
+                            onClick = { showCustomPicker = false },
+                            shape = RoundedCornerShape(20.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                        ) {
+                            Text(
+                                text = "Back",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp)
+                            )
+                        }
+                        
+                        // Confirm button
+                        Surface(
+                            onClick = { onTimeSelected(selectedTime) },
+                            shape = RoundedCornerShape(20.dp),
+                            color = MaterialTheme.colorScheme.primary
+                        ) {
+                            Text(
+                                text = "Set ${formatRestTime(selectedTime)}",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.onPrimary,
+                                modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp)
+                            )
+                        }
+                    }
+                } else {
+                    // Quick preset chips
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        items(timeOptions) { seconds ->
-                            val isSelected = seconds == selectedTime
-                            
-                            Surface(
-                                onClick = { selectedTime = seconds },
-                                shape = RoundedCornerShape(12.dp),
-                                color = if (isSelected) {
-                                    MaterialTheme.colorScheme.surfaceVariant
-                                } else {
-                                    Color.Transparent
-                                },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 2.dp, horizontal = 16.dp)
-                            ) {
-                                Text(
+                        // Row 1: 30s, 1:00, 1:30
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            presets.take(3).forEach { seconds ->
+                                PresetChip(
                                     text = formatRestTime(seconds),
-                                    style = MaterialTheme.typography.titleLarge.copy(
-                                        fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
-                                    ),
-                                    color = if (isSelected) {
-                                        MaterialTheme.colorScheme.onSurface
-                                    } else {
-                                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                                    },
-                                    textAlign = TextAlign.Center,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(vertical = 8.dp)
+                                    isSelected = currentSeconds == seconds,
+                                    onClick = { onTimeSelected(seconds) },
+                                    modifier = Modifier.weight(1f)
                                 )
                             }
                         }
+                        
+                        // Row 2: 2:00, 3:00
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            presets.drop(3).forEach { seconds ->
+                                PresetChip(
+                                    text = formatRestTime(seconds),
+                                    isSelected = currentSeconds == seconds,
+                                    onClick = { onTimeSelected(seconds) },
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                            
+                            // Custom button
+                            PresetChip(
+                                text = if (isCustomValue) formatRestTime(currentSeconds) else "Custom",
+                                isSelected = isCustomValue,
+                                onClick = { 
+                                    selectedTime = currentSeconds
+                                    showCustomPicker = true 
+                                },
+                                modifier = Modifier.weight(1f),
+                                isCustom = true
+                            )
+                        }
+                    }
+                    
+                    Spacer(modifier = Modifier.height(16.dp))
+                    
+                    // Cancel button
+                    Surface(
+                        onClick = onDismiss,
+                        shape = RoundedCornerShape(20.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                    ) {
+                        Text(
+                            text = "Cancel",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = 32.dp, vertical = 12.dp)
+                        )
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PresetChip(
+    text: String,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    isCustom: Boolean = false
+) {
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(12.dp),
+        color = when {
+            isSelected -> MaterialTheme.colorScheme.primary
+            isCustom -> MaterialTheme.colorScheme.tertiary.copy(alpha = 0.15f)
+            else -> MaterialTheme.colorScheme.surfaceVariant
+        },
+        modifier = modifier
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.bodyMedium.copy(
+                fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium
+            ),
+            color = when {
+                isSelected -> MaterialTheme.colorScheme.onPrimary
+                isCustom -> MaterialTheme.colorScheme.tertiary
+                else -> MaterialTheme.colorScheme.onSurfaceVariant
+            },
+            textAlign = TextAlign.Center,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 12.dp)
+        )
+    }
+}
+
+@Composable
+private fun CustomTimePicker(
+    currentSeconds: Int,
+    onTimeSelected: (Int) -> Unit
+) {
+    // Generate time options from 0:15 to 10:00 in 15-second increments
+    val timeOptions = remember {
+        (15..600 step 15).toList()
+    }
+    
+    val listState = rememberLazyListState()
+    
+    // Find initial index
+    val initialIndex = remember(currentSeconds) {
+        timeOptions.indexOfFirst { it >= currentSeconds }.coerceAtLeast(0)
+    }
+    
+    LaunchedEffect(Unit) {
+        // Scroll to center the current selection
+        listState.scrollToItem((initialIndex - 2).coerceAtLeast(0))
+    }
+    
+    Box(
+        modifier = Modifier
+            .height(180.dp)
+            .fillMaxWidth()
+    ) {
+        LazyColumn(
+            state = listState,
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            items(timeOptions) { seconds ->
+                val isSelected = seconds == currentSeconds
                 
-                Spacer(modifier = Modifier.height(20.dp))
-                
-                // OK Button
                 Surface(
-                    onClick = { onTimeSelected(selectedTime) },
-                    shape = RoundedCornerShape(20.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant
+                    onClick = { onTimeSelected(seconds) },
+                    shape = RoundedCornerShape(12.dp),
+                    color = if (isSelected) {
+                        MaterialTheme.colorScheme.primaryContainer
+                    } else {
+                        Color.Transparent
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 2.dp, horizontal = 16.dp)
                 ) {
                     Text(
-                        text = "OK",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = 32.dp, vertical = 12.dp)
+                        text = formatRestTime(seconds),
+                        style = MaterialTheme.typography.titleLarge.copy(
+                            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
+                        ),
+                        color = if (isSelected) {
+                            MaterialTheme.colorScheme.onPrimaryContainer
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                        },
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 8.dp)
                     )
                 }
             }

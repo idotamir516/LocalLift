@@ -2,7 +2,9 @@ package com.workout.app.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// Modern fitness-inspired dark theme colors
+// ============================================
+// THEME: CYAN (Default - Electric Cyan/Teal)
+// ============================================
 
 // Primary - Electric cyan/teal accent
 val Primary = Color(0xFF00E5CC)
@@ -55,3 +57,89 @@ val DarkCardBackgroundElevated = Color(0xFF28282E)
 // Outline colors
 val DarkOutline = Color(0xFF3A3A40)
 val DarkOutlineVariant = Color(0xFF2A2A30)
+
+// ============================================
+// THEME: PURPLE (Royal Purple)
+// ============================================
+val PurplePrimary = Color(0xFFBB86FC)
+val PurpleAccent = Color(0xFFE040FB)
+val PurpleOnPrimary = Color(0xFF1F1F1F)
+val PurplePrimaryContainer = Color(0xFF4A2D6E)
+val PurpleOnPrimaryContainer = Color(0xFFE8DDFF)
+
+// ============================================
+// THEME: ORANGE (Energetic Orange)
+// ============================================
+val OrangePrimary = Color(0xFFFF9800)
+val OrangeAccent = Color(0xFFFFAB40)
+val OrangeOnPrimary = Color(0xFF1F1F1F)
+val OrangePrimaryContainer = Color(0xFF5C3D00)
+val OrangeOnPrimaryContainer = Color(0xFFFFDDB3)
+
+// ============================================
+// THEME: GREEN (Fresh Green)
+// ============================================
+val GreenPrimary = Color(0xFF4ADE80)
+val GreenAccent = Color(0xFF69F0AE)
+val GreenOnPrimary = Color(0xFF1F1F1F)
+val GreenPrimaryContainer = Color(0xFF1B4332)
+val GreenOnPrimaryContainer = Color(0xFFB7FFD8)
+
+// ============================================
+// THEME: RED (Bold Red)
+// ============================================
+val RedPrimary = Color(0xFFFF6B6B)
+val RedAccent = Color(0xFFFF8A80)
+val RedOnPrimary = Color(0xFF1F1F1F)
+val RedPrimaryContainer = Color(0xFF5C1515)
+val RedOnPrimaryContainer = Color(0xFFFFDAD6)
+
+// ============================================
+// THEME: BLUE (Classic Blue)
+// ============================================
+val BluePrimary = Color(0xFF64B5F6)
+val BlueAccent = Color(0xFF82B1FF)
+val BlueOnPrimary = Color(0xFF1F1F1F)
+val BluePrimaryContainer = Color(0xFF1A4A6E)
+val BlueOnPrimaryContainer = Color(0xFFD1E4FF)
+
+// ============================================
+// THEME: PINK (Vibrant Pink)
+// ============================================
+val PinkPrimary = Color(0xFFFF80AB)
+val PinkAccent = Color(0xFFFF4081)
+val PinkOnPrimary = Color(0xFF1F1F1F)
+val PinkPrimaryContainer = Color(0xFF5C1A3A)
+val PinkOnPrimaryContainer = Color(0xFFFFD9E4)
+
+// ============================================
+// MUTED COLOR VARIANTS (Less saturated, softer look)
+// ============================================
+
+// Muted Cyan
+val MutedCyanPrimary = Color(0xFF6BBFB5)
+val MutedCyanAccent = Color(0xFF7ECFC5)
+
+// Muted Purple
+val MutedPurplePrimary = Color(0xFF9E8CC2)
+val MutedPurpleAccent = Color(0xFFB8A4D4)
+
+// Muted Orange
+val MutedOrangePrimary = Color(0xFFD4A574)
+val MutedOrangeAccent = Color(0xFFE0B68A)
+
+// Muted Green
+val MutedGreenPrimary = Color(0xFF7BC494)
+val MutedGreenAccent = Color(0xFF8DD4A5)
+
+// Muted Red
+val MutedRedPrimary = Color(0xFFCF8B8B)
+val MutedRedAccent = Color(0xFFD9A0A0)
+
+// Muted Blue
+val MutedBluePrimary = Color(0xFF8FB5D4)
+val MutedBlueAccent = Color(0xFFA4C5E0)
+
+// Muted Pink
+val MutedPinkPrimary = Color(0xFFD4A0B8)
+val MutedPinkAccent = Color(0xFFE0B0C8)

@@ -113,6 +113,7 @@ fun ActiveWorkoutScreen(
     session: WorkoutSession? = null,
     exercises: List<ActiveExercise> = emptyList(),
     timerState: TimerState = TimerState(),
+    timerStartsExpanded: Boolean = true,
     onSetWeightChange: (exerciseIndex: Int, setNumber: Int, weight: Int?) -> Unit = { _, _, _ -> },
     onSetRepsChange: (exerciseIndex: Int, setNumber: Int, reps: Int?) -> Unit = { _, _, _ -> },
     onSetRestChange: (exerciseIndex: Int, setNumber: Int, restSeconds: Int?) -> Unit = { _, _, _ -> },
@@ -120,8 +121,9 @@ fun ActiveWorkoutScreen(
     onSetRpeChange: (exerciseIndex: Int, setNumber: Int, rpe: Float?) -> Unit = { _, _, _ -> },
     onSetComplete: (exerciseIndex: Int, setNumber: Int) -> Unit = { _, _ -> },
     onAddSet: (exerciseIndex: Int) -> Unit = {},
-    onRemoveSet: (exerciseIndex: Int, setNumber: Int) -> Unit = { _, _ -> },
+    onRemoveSet: (exerciseIndex: Int, setId: Long) -> Unit = { _, _ -> },
     onAddExercise: () -> Unit = {},
+    onRemoveExercise: (exerciseIndex: Int) -> Unit = {},
     onMoveExercise: (fromIndex: Int, toIndex: Int) -> Unit = { _, _ -> },
     onToggleExpand: (exerciseIndex: Int) -> Unit = {},
     onTimerPause: () -> Unit = {},
@@ -130,7 +132,8 @@ fun ActiveWorkoutScreen(
     onTimerAddTime: () -> Unit = {},
     onTimerSubtractTime: () -> Unit = {},
     onFinishWorkout: () -> Unit = {},
-    onCancelWorkout: () -> Unit = {}
+    onCancelWorkout: () -> Unit = {},
+    onExerciseNameClick: (exerciseName: String) -> Unit = {}
 ) {
     var showCancelDialog by remember { mutableStateOf(false) }
     var showFinishDialog by remember { mutableStateOf(false) }
@@ -267,6 +270,7 @@ fun ActiveWorkoutScreen(
                     onSkip = onTimerSkip,
                     onAddTime = onTimerAddTime,
                     onSubtractTime = onTimerSubtractTime,
+                    startExpanded = timerStartsExpanded,
                     modifier = Modifier.padding(16.dp)
                 )
                 
@@ -303,6 +307,7 @@ fun ActiveWorkoutScreen(
                             exerciseName = exercise.exerciseName,
                             sets = exercise.sets.map { set ->
                                 SetData(
+                                    id = set.setLog.id,
                                     setNumber = set.setNumber,
                                     weight = set.weight,
                                     reps = set.reps,
@@ -338,10 +343,12 @@ fun ActiveWorkoutScreen(
                             onSetComplete = { setNumber ->
                                 onSetComplete(index, setNumber)
                             },
-                            onSetRemove = { setNumber ->
-                                onRemoveSet(index, setNumber)
+                            onSetRemove = { setId ->
+                                onRemoveSet(index, setId)
                             },
                             onAddSet = { onAddSet(index) },
+                            onExerciseNameClick = { onExerciseNameClick(exercise.exerciseName) },
+                            onRemoveExercise = { onRemoveExercise(index) },
                             onMoveUp = {
                                 if (index > 0) onMoveExercise(index, index - 1)
                             },

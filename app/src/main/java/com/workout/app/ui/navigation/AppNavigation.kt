@@ -22,6 +22,7 @@ import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -44,10 +45,16 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.workout.app.WorkoutApp
 import com.workout.app.data.entities.CustomExercise
+import com.workout.app.data.entities.SetType
 import com.workout.app.data.entities.TemplateExercise
 import com.workout.app.data.entities.TemplateSet
 import com.workout.app.data.entities.WorkoutTemplate
 import com.workout.app.ui.components.ExercisePicker
+import com.workout.app.ui.components.ExerciseDetailPopup
+import com.workout.app.ui.components.SessionLiftData
+import com.workout.app.ui.components.LiftSetData
+import com.workout.app.ui.components.OneRepMaxEntry
+import com.workout.app.ui.components.findBestOneRepMax
 import com.workout.app.ui.screens.ActiveWorkoutScreen
 import com.workout.app.ui.screens.ActiveWorkoutState
 import com.workout.app.ui.screens.EditWorkoutScreen
@@ -61,6 +68,7 @@ import com.workout.app.ui.screens.SettingsScreen
 import com.workout.app.ui.screens.StartWorkoutScreen
 import com.workout.app.ui.screens.TemplateEditorScreen
 import com.workout.app.ui.screens.TemplatesScreen
+import com.workout.app.ui.screens.TrainingPhasesScreen
 import com.workout.app.ui.screens.WorkoutDetailScreen
 import com.workout.app.util.SettingsManager
 import com.workout.app.util.WorkoutExporter
@@ -90,6 +98,7 @@ sealed class Screen(val route: String) {
     }
     object ProgramAnalyzer : Screen("program_analyzer")
     object Settings : Screen("settings")
+    object TrainingPhases : Screen("training_phases")
 }
 
 /**
@@ -154,8 +163,11 @@ fun AppNavigation() {
         ) {
             // Start Workout screen
             composable(Screen.StartWorkout.route) {
+                val folders = database.folderDao().getAllFolders()
+                
                 StartWorkoutScreen(
                     templates = templates,
+                    folders = folders,
                     activeSession = activeSession,
                     onStartWorkout = { templateId ->
                         scope.launch {
@@ -238,8 +250,11 @@ fun AppNavigation() {
             
             // Templates screen
             composable(Screen.Templates.route) {
+                val folders = database.folderDao().getAllFolders()
+                
                 TemplatesScreen(
                     templates = templates,
+                    folders = folders,
                     onCreateTemplate = {
                         navController.navigate(Screen.TemplateEditor.createRoute(null))
                     },
@@ -252,6 +267,35 @@ fun AppNavigation() {
                             if (template != null) {
                                 database.templateDao().deleteTemplate(template.template)
                             }
+                        }
+                    },
+                    onCreateFolder = { name, colorHex ->
+                        scope.launch {
+                            val maxOrder = database.folderDao().getMaxOrderIndex()
+                            database.folderDao().insertFolder(
+                                com.workout.app.data.entities.WorkoutFolder(
+                                    name = name,
+                                    colorHex = colorHex,
+                                    orderIndex = maxOrder + 1
+                                )
+                            )
+                        }
+                    },
+                    onEditFolder = { folder, newName, newColorHex ->
+                        scope.launch {
+                            database.folderDao().updateFolder(
+                                folder.copy(name = newName, colorHex = newColorHex)
+                            )
+                        }
+                    },
+                    onDeleteFolder = { folderId ->
+                        scope.launch {
+                            database.folderDao().deleteFolderById(folderId)
+                        }
+                    },
+                    onMoveTemplateToFolder = { templateId, folderId ->
+                        scope.launch {
+                            database.templateDao().moveTemplateToFolder(templateId, folderId)
                         }
                     },
                     onOpenSettings = {
@@ -267,6 +311,54 @@ fun AppNavigation() {
             composable(Screen.Settings.route) {
                 SettingsScreen(
                     settingsManager = settingsManager,
+                    onNavigateBack = {
+                        navController.popBackStack()
+                    },
+                    onNavigateToTrainingPhases = {
+                        navController.navigate(Screen.TrainingPhases.route)
+                    }
+                )
+            }
+            
+            // Training Phases screen
+            composable(Screen.TrainingPhases.route) {
+                val today = System.currentTimeMillis()
+                TrainingPhasesScreen(
+                    phases = database.phaseDao().getAllPhases(),
+                    activePhase = database.phaseDao().getActivePhaseForDate(today),
+                    onCreatePhase = { name, type, startDate, endDate, notes ->
+                        scope.launch {
+                            database.phaseDao().insertPhase(
+                                com.workout.app.data.entities.TrainingPhase(
+                                    name = name,
+                                    type = type,
+                                    startDate = startDate,
+                                    endDate = endDate,
+                                    notes = notes
+                                )
+                            )
+                        }
+                    },
+                    onUpdatePhase = { phase ->
+                        scope.launch {
+                            database.phaseDao().updatePhase(phase)
+                        }
+                    },
+                    onDeletePhase = { phaseId ->
+                        scope.launch {
+                            database.phaseDao().deletePhaseById(phaseId)
+                        }
+                    },
+                    onCheckOverlap = { startDate, endDate, excludePhaseId ->
+                        // Check for overlapping phases
+                        if (endDate == null || endDate == Long.MAX_VALUE) {
+                            // For open-ended phases, check if any phase overlaps
+                            database.phaseDao().findOverlappingPhaseForOpenEndedPhase(startDate, excludePhaseId)
+                        } else {
+                            // For phases with end dates, check standard overlap
+                            database.phaseDao().findOverlappingPhase(startDate, endDate, excludePhaseId)
+                        }
+                    },
                     onNavigateBack = {
                         navController.popBackStack()
                     }
@@ -357,16 +449,31 @@ fun AppNavigation() {
                     )
                 }
                 
+                // Cleanup when composable leaves composition
+                DisposableEffect(workoutState) {
+                    onDispose {
+                        workoutState.cleanup()
+                    }
+                }
+                
                 // Collect state
                 val session by workoutState.session.collectAsState()
                 val exercises by workoutState.exercises.collectAsState()
                 val timerState by workoutState.timerState.collectAsState()
                 val showExercisePicker by workoutState.showExercisePicker.collectAsState()
                 
+                // Get timer display setting
+                val timerStartsMinimized by settingsManager.timerStartsMinimized.collectAsState()
+                
+                // Exercise detail popup state
+                var showExerciseDetailPopup by remember { mutableStateOf(false) }
+                var selectedExerciseForDetails by remember { mutableStateOf<String?>(null) }
+                
                 ActiveWorkoutScreen(
                     session = session,
                     exercises = exercises,
                     timerState = timerState,
+                    timerStartsExpanded = !timerStartsMinimized,
                     onSetWeightChange = { exerciseIndex, setNumber, weight ->
                         workoutState.updateSetWeight(exerciseIndex, setNumber, weight)
                     },
@@ -388,11 +495,14 @@ fun AppNavigation() {
                     onAddSet = { exerciseIndex ->
                         workoutState.addSet(exerciseIndex)
                     },
-                    onRemoveSet = { exerciseIndex, setNumber ->
-                        workoutState.removeSet(exerciseIndex, setNumber)
+                    onRemoveSet = { exerciseIndex, setId ->
+                        workoutState.removeSetById(exerciseIndex, setId)
                     },
                     onAddExercise = {
                         workoutState.showExercisePicker()
+                    },
+                    onRemoveExercise = { exerciseIndex ->
+                        workoutState.removeExercise(exerciseIndex)
                     },
                     onMoveExercise = { fromIndex, toIndex ->
                         workoutState.reorderExercises(fromIndex, toIndex)
@@ -420,8 +530,71 @@ fun AppNavigation() {
                             workoutState.cancelWorkout()
                             navController.popBackStack()
                         }
+                    },
+                    onExerciseNameClick = { exerciseName ->
+                        selectedExerciseForDetails = exerciseName
+                        showExerciseDetailPopup = true
                     }
                 )
+                
+                // Exercise detail popup
+                if (showExerciseDetailPopup && selectedExerciseForDetails != null) {
+                    var isLoadingDetails by remember { mutableStateOf(true) }
+                    var recentSessions by remember { mutableStateOf<List<SessionLiftData>>(emptyList()) }
+                    var estimatedOneRepMax by remember { mutableStateOf<Float?>(null) }
+                    var oneRepMaxHistory by remember { mutableStateOf<List<OneRepMaxEntry>>(emptyList()) }
+                    
+                    LaunchedEffect(selectedExerciseForDetails) {
+                        isLoadingDetails = true
+                        try {
+                            val historicalData = database.sessionDao().getHistoricalSetsForExercise(selectedExerciseForDetails!!)
+                            
+                            // Group by session
+                            val sessionGroups = historicalData.groupBy { it.sessionId }
+                            recentSessions = sessionGroups.map { (_, sets) ->
+                                SessionLiftData(
+                                    sessionDate = sets.firstOrNull()?.sessionDate ?: 0L,
+                                    sets = sets.map { set ->
+                                        LiftSetData(
+                                            setNumber = set.setNumber,
+                                            setType = set.setType,
+                                            weightLbs = set.weightLbs,
+                                            reps = set.reps,
+                                            rpe = set.rpe
+                                        )
+                                    }
+                                )
+                            }.sortedByDescending { it.sessionDate }
+                            
+                            // Calculate 1RM history from each session
+                            oneRepMaxHistory = recentSessions.mapNotNull { session ->
+                                val best1rm = findBestOneRepMax(session.sets)
+                                if (best1rm > 0) {
+                                    OneRepMaxEntry(date = session.sessionDate, estimatedMax = best1rm)
+                                } else null
+                            }.sortedBy { it.date }
+                            
+                            // Current estimated 1RM is the most recent
+                            estimatedOneRepMax = oneRepMaxHistory.lastOrNull()?.estimatedMax
+                            
+                        } catch (e: Exception) {
+                            // Handle error silently
+                        }
+                        isLoadingDetails = false
+                    }
+                    
+                    ExerciseDetailPopup(
+                        exerciseName = selectedExerciseForDetails!!,
+                        isLoading = isLoadingDetails,
+                        recentSessions = recentSessions,
+                        estimatedOneRepMax = estimatedOneRepMax,
+                        oneRepMaxHistory = oneRepMaxHistory,
+                        onDismiss = {
+                            showExerciseDetailPopup = false
+                            selectedExerciseForDetails = null
+                        }
+                    )
+                }
                 
                 // Exercise picker bottom sheet
                 ExercisePicker(
@@ -458,6 +631,10 @@ fun AppNavigation() {
                 // Load existing template with exercises and sets if editing
                 var loadedExercises by remember { mutableStateOf<List<EditableExercise>?>(null) }
                 var loadedTemplateName by remember { mutableStateOf("") }
+                
+                // Exercise detail popup state
+                var showTemplateExerciseDetailPopup by remember { mutableStateOf(false) }
+                var selectedTemplateExerciseForDetails by remember { mutableStateOf<String?>(null) }
                 
                 LaunchedEffect(templateId) {
                     if (templateId != null) {
@@ -579,6 +756,10 @@ fun AppNavigation() {
                             }
                         },
                         onBack = { navController.popBackStack() },
+                        onExerciseNameClick = { exerciseName ->
+                            selectedTemplateExerciseForDetails = exerciseName
+                            showTemplateExerciseDetailPopup = true
+                        },
                         customExercises = database.customExerciseDao().getAllCustomExercises(),
                         onCreateCustomExercise = { customExercise ->
                             scope.launch {
@@ -591,6 +772,65 @@ fun AppNavigation() {
                             }
                         }
                     )
+                    
+                    // Exercise detail popup for template editor
+                    if (showTemplateExerciseDetailPopup && selectedTemplateExerciseForDetails != null) {
+                        var isLoadingDetails by remember { mutableStateOf(true) }
+                        var recentSessions by remember { mutableStateOf<List<SessionLiftData>>(emptyList()) }
+                        var estimatedOneRepMax by remember { mutableStateOf<Float?>(null) }
+                        var oneRepMaxHistory by remember { mutableStateOf<List<OneRepMaxEntry>>(emptyList()) }
+                        
+                        LaunchedEffect(selectedTemplateExerciseForDetails) {
+                            isLoadingDetails = true
+                            try {
+                                val historicalData = database.sessionDao().getHistoricalSetsForExercise(selectedTemplateExerciseForDetails!!)
+                                
+                                // Group by session
+                                val sessionGroups = historicalData.groupBy { it.sessionId }
+                                recentSessions = sessionGroups.map { (_, sets) ->
+                                    SessionLiftData(
+                                        sessionDate = sets.firstOrNull()?.sessionDate ?: 0L,
+                                        sets = sets.map { set ->
+                                            LiftSetData(
+                                                setNumber = set.setNumber,
+                                                setType = set.setType,
+                                                weightLbs = set.weightLbs,
+                                                reps = set.reps,
+                                                rpe = set.rpe
+                                            )
+                                        }
+                                    )
+                                }.sortedByDescending { it.sessionDate }
+                                
+                                // Calculate 1RM history from each session
+                                oneRepMaxHistory = recentSessions.mapNotNull { session ->
+                                    val best1rm = findBestOneRepMax(session.sets)
+                                    if (best1rm > 0) {
+                                        OneRepMaxEntry(date = session.sessionDate, estimatedMax = best1rm)
+                                    } else null
+                                }.sortedBy { it.date }
+                                
+                                // Current estimated 1RM is the most recent
+                                estimatedOneRepMax = oneRepMaxHistory.lastOrNull()?.estimatedMax
+                                
+                            } catch (e: Exception) {
+                                // Handle error silently
+                            }
+                            isLoadingDetails = false
+                        }
+                        
+                        ExerciseDetailPopup(
+                            exerciseName = selectedTemplateExerciseForDetails!!,
+                            isLoading = isLoadingDetails,
+                            recentSessions = recentSessions,
+                            estimatedOneRepMax = estimatedOneRepMax,
+                            oneRepMaxHistory = oneRepMaxHistory,
+                            onDismiss = {
+                                showTemplateExerciseDetailPopup = false
+                                selectedTemplateExerciseForDetails = null
+                            }
+                        )
+                    }
                 }
             }
             

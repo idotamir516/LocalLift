@@ -59,7 +59,6 @@ import com.workout.app.data.dao.FullTemplateWithExercisesAndSets
 import com.workout.app.data.dao.TemplateWithExercises
 import com.workout.app.data.entities.CustomExercise
 import com.workout.app.ui.theme.DarkBackground
-import com.workout.app.ui.theme.NeonCyan
 import com.workout.app.util.MuscleSetAnalysis
 import com.workout.app.util.ProgramAnalysis
 import com.workout.app.util.ProgramAnalyzer
@@ -154,7 +153,7 @@ fun ProgramAnalyzerScreen(
                         Icon(
                             imageVector = Icons.Default.Analytics,
                             contentDescription = null,
-                            tint = NeonCyan,
+                            tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(24.dp)
                         )
                         Spacer(modifier = Modifier.width(12.dp))
@@ -244,7 +243,7 @@ fun ProgramAnalyzerScreen(
                             modifier = Modifier.fillMaxWidth(),
                             enabled = selectedTemplateIds.isNotEmpty() && !isAnalyzing,
                             colors = ButtonDefaults.buttonColors(
-                                containerColor = NeonCyan,
+                                containerColor = MaterialTheme.colorScheme.primary,
                                 contentColor = Color.Black
                             ),
                             shape = RoundedCornerShape(12.dp)
@@ -291,14 +290,14 @@ private fun TemplateSelectionItem(
             .fillMaxWidth()
             .then(
                 if (isSelected) {
-                    Modifier.border(2.dp, NeonCyan, RoundedCornerShape(12.dp))
+                    Modifier.border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(12.dp))
                 } else {
                     Modifier
                 }
             ),
         shape = RoundedCornerShape(12.dp),
         color = if (isSelected) {
-            NeonCyan.copy(alpha = 0.1f)
+            MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
         } else {
             MaterialTheme.colorScheme.surface
         },
@@ -316,7 +315,7 @@ private fun TemplateSelectionItem(
                     .size(24.dp)
                     .clip(CircleShape)
                     .background(
-                        if (isSelected) NeonCyan else MaterialTheme.colorScheme.surfaceVariant
+                        if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
                     ),
                 contentAlignment = Alignment.Center
             ) {
@@ -432,8 +431,8 @@ private fun SummaryCard(
                     .background(
                         Brush.horizontalGradient(
                             colors = listOf(
-                                NeonCyan.copy(alpha = 0.15f),
-                                NeonCyan.copy(alpha = 0.05f)
+                                MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                                MaterialTheme.colorScheme.primary.copy(alpha = 0.05f)
                             )
                         )
                     )
@@ -496,7 +495,7 @@ private fun StatItem(
             text = value,
             style = MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.Bold,
-            color = NeonCyan
+            color = MaterialTheme.colorScheme.primary
         )
         Text(
             text = label,
@@ -515,6 +514,10 @@ private fun MuscleAnalysisCard(
 ) {
     var isExpanded by remember { mutableStateOf(false) }
     val effectiveSets = muscleAnalysis.getEffectiveSets(countWarmupAsEffective, countDropSetAsEffective)
+    
+    // Calculate effective counts for badges (only show sets that count)
+    val primaryEffectiveCount = muscleAnalysis.primarySets.getEffectiveCount(countWarmupAsEffective, countDropSetAsEffective)
+    val auxiliaryEffectiveCount = muscleAnalysis.auxiliarySets.getEffectiveCount(countWarmupAsEffective, countDropSetAsEffective)
     
     Surface(
         modifier = modifier.fillMaxWidth(),
@@ -547,21 +550,21 @@ private fun MuscleAnalysisCard(
                     )
                 }
                 
-                // Set counts summary
+                // Set counts summary (only show effective counts)
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    if (muscleAnalysis.totalPrimarySets > 0) {
+                    if (primaryEffectiveCount > 0) {
                         SetBadge(
-                            count = muscleAnalysis.totalPrimarySets,
+                            count = primaryEffectiveCount,
                             label = "P",
-                            color = NeonCyan
+                            color = MaterialTheme.colorScheme.primary
                         )
                     }
-                    if (muscleAnalysis.totalAuxiliarySets > 0) {
+                    if (auxiliaryEffectiveCount > 0) {
                         SetBadge(
-                            count = muscleAnalysis.totalAuxiliarySets,
+                            count = auxiliaryEffectiveCount,
                             label = "A",
                             color = MaterialTheme.colorScheme.tertiary
                         )
@@ -595,7 +598,7 @@ private fun MuscleAnalysisCard(
                             text = "Primary (direct targeting)",
                             style = MaterialTheme.typography.labelMedium,
                             fontWeight = FontWeight.SemiBold,
-                            color = NeonCyan
+                            color = MaterialTheme.colorScheme.primary
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         SetBreakdownRow(counts = muscleAnalysis.primarySets)
@@ -729,13 +732,13 @@ private fun TemplateTimeCard(
                 
                 Surface(
                     shape = RoundedCornerShape(8.dp),
-                    color = NeonCyan.copy(alpha = 0.2f)
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
                 ) {
                     Text(
                         text = templateTime.formatTime(totalTimeSeconds),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
-                        color = NeonCyan,
+                        color = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
                     )
                 }
@@ -834,7 +837,7 @@ private fun LegendCard(
             
             LegendItem(
                 badge = "P",
-                badgeColor = NeonCyan,
+                badgeColor = MaterialTheme.colorScheme.primary,
                 description = "Primary sets - muscle is directly targeted"
             )
             LegendItem(

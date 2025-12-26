@@ -6,6 +6,7 @@ import com.workout.app.data.Exercise
 import com.workout.app.data.dao.SessionWithDetails
 import com.workout.app.data.entities.ExerciseLog
 import com.workout.app.data.entities.SetLog
+import com.workout.app.data.entities.SetType
 import com.workout.app.data.entities.WorkoutSession
 import com.workout.app.util.AudioPlayer
 import com.workout.app.util.PreviousLiftSource
@@ -40,7 +41,7 @@ class ActiveWorkoutState(
     private val audioPlayer = AudioPlayer(context)
     private val settingsManager = SettingsManager.getInstance(context)
     
-    private val timerManager = TimerManager(scope) {
+    private val timerManager = TimerManager(context, scope) {
         // Play sound when timer completes
         audioPlayer.playNotificationSound()
     }
@@ -87,24 +88,41 @@ class ActiveWorkoutState(
                         exerciseName = exerciseName,
                         restSeconds = exerciseWithSets.sets.firstOrNull()?.restSeconds,
                         showRpe = exerciseWithSets.exerciseLog.showRpe,
-                        sets = exerciseWithSets.sets.sortedBy { it.setNumber }.map { setLog ->
-                            // Find matching previous set (same set number and set type)
-                            val matchingPreviousSet = previousSets.find { prev ->
-                                prev.setNumber == setLog.setNumber && prev.setType == setLog.setType
-                            }
+                        sets = run {
+                            // Sort current sets by setNumber
+                            val sortedSets = exerciseWithSets.sets.sortedBy { it.setNumber }
                             
-                            ActiveSet(
-                                setLog = setLog,
-                                setNumber = setLog.setNumber,
-                                weight = setLog.weightLbs?.toInt(),
-                                reps = setLog.reps,
-                                rpe = setLog.rpe,
-                                isCompleted = setLog.completedAt != null,
-                                previousWeight = matchingPreviousSet?.weightLbs?.toInt(),
-                                previousReps = matchingPreviousSet?.reps,
-                                restSeconds = setLog.restSeconds,
-                                setType = setLog.setType
-                            )
+                            // Group previous sets by type and sort by setNumber within each type
+                            // This allows matching by position within type rather than absolute setNumber
+                            val previousSetsByType = previousSets
+                                .groupBy { it.setType }
+                                .mapValues { (_, sets) -> sets.sortedBy { it.setNumber } }
+                            
+                            // Track position within each set type for current sets
+                            val typeCounters = mutableMapOf<SetType, Int>()
+                            
+                            sortedSets.map { setLog ->
+                                // Get the position of this set within its type (0-indexed)
+                                val positionInType = typeCounters.getOrDefault(setLog.setType, 0)
+                                typeCounters[setLog.setType] = positionInType + 1
+                                
+                                // Find matching previous set by position within the same type
+                                val previousSetsOfSameType = previousSetsByType[setLog.setType] ?: emptyList()
+                                val matchingPreviousSet = previousSetsOfSameType.getOrNull(positionInType)
+                                
+                                ActiveSet(
+                                    setLog = setLog,
+                                    setNumber = setLog.setNumber,
+                                    weight = setLog.weightLbs?.toInt(),
+                                    reps = setLog.reps,
+                                    rpe = setLog.rpe,
+                                    isCompleted = setLog.completedAt != null,
+                                    previousWeight = matchingPreviousSet?.weightLbs?.toInt(),
+                                    previousReps = matchingPreviousSet?.reps,
+                                    restSeconds = setLog.restSeconds,
+                                    setType = setLog.setType
+                                )
+                            }
                         },
                         isExpanded = true
                     )
@@ -335,26 +353,142 @@ class ActiveWorkoutState(
     }
     
     /**
-     * Removes a set from an exercise.
+     * Removes a set from an exercise and renumbers remaining sets.
      */
     fun removeSet(exerciseIndex: Int, setNumber: Int) {
+        android.util.Log.d("SwipeDebug", "removeSet called: exerciseIndex=$exerciseIndex, setNumber=$setNumber")
+        
         val currentExercises = _exercises.value.toMutableList()
-        if (exerciseIndex >= currentExercises.size) return
+        if (exerciseIndex >= currentExercises.size) {
+            android.util.Log.d("SwipeDebug", "removeSet: exerciseIndex out of bounds, returning early")
+            return
+        }
         
         val exercise = currentExercises[exerciseIndex]
-        val setToRemove = exercise.sets.find { it.setNumber == setNumber } ?: return
+        android.util.Log.d("SwipeDebug", "removeSet: exercise has ${exercise.sets.size} sets: ${exercise.sets.map { "id=${it.setLog.id},num=${it.setNumber}" }}")
         
-        // Don't allow removing the last set
-        if (exercise.sets.size <= 1) return
+        val setToRemove = exercise.sets.find { it.setNumber == setNumber }
+        if (setToRemove == null) {
+            android.util.Log.d("SwipeDebug", "removeSet: setNumber=$setNumber NOT FOUND in exercise sets, returning early")
+            return
+        }
+        android.util.Log.d("SwipeDebug", "removeSet: found setToRemove id=${setToRemove.setLog.id}")
+        
+        // Remove the set and renumber remaining sets to keep consecutive numbers
+        val remainingSets = exercise.sets.filter { it.setNumber != setNumber }
+        android.util.Log.d("SwipeDebug", "removeSet: remainingSets count=${remainingSets.size}")
+        
+        val renumberedSets = remainingSets
+            .sortedBy { it.setNumber }
+            .mapIndexed { index, set ->
+                val newSetNumber = index + 1
+                if (set.setNumber != newSetNumber) {
+                    // Update set number in the SetLog
+                    val updatedSetLog = set.setLog.copy(setNumber = newSetNumber)
+                    set.copy(setNumber = newSetNumber, setLog = updatedSetLog)
+                } else {
+                    set
+                }
+            }
+        
+        android.util.Log.d("SwipeDebug", "removeSet: renumberedSets: ${renumberedSets.map { "id=${it.setLog.id},num=${it.setNumber}" }}")
+        
+        // Update local state immediately
+        currentExercises[exerciseIndex] = exercise.copy(sets = renumberedSets)
+        _exercises.value = currentExercises
+        android.util.Log.d("SwipeDebug", "removeSet: state updated, exercise now has ${renumberedSets.size} sets")
         
         scope.launch {
             // Delete from database
             database.sessionDao().deleteSetLog(setToRemove.setLog.id)
+            
+            // Update renumbered sets in database
+            val setsToUpdate = renumberedSets
+                .filter { set -> remainingSets.any { it.setLog.id == set.setLog.id && it.setNumber != set.setNumber } }
+                .map { it.setLog }
+            if (setsToUpdate.isNotEmpty()) {
+                database.sessionDao().updateSetLogs(setsToUpdate)
+            }
+        }
+    }
+    
+    /**
+     * Removes a set from an exercise by its stable database ID.
+     * This is more reliable than removing by setNumber since IDs don't change during renumbering.
+     */
+    fun removeSetById(exerciseIndex: Int, setId: Long) {
+        android.util.Log.d("SwipeDebug", "removeSetById called: exerciseIndex=$exerciseIndex, setId=$setId")
+        
+        val currentExercises = _exercises.value.toMutableList()
+        if (exerciseIndex >= currentExercises.size) {
+            android.util.Log.d("SwipeDebug", "removeSetById: exerciseIndex out of bounds, returning early")
+            return
+        }
+        
+        val exercise = currentExercises[exerciseIndex]
+        android.util.Log.d("SwipeDebug", "removeSetById: exercise has ${exercise.sets.size} sets: ${exercise.sets.map { "id=${it.setLog.id},num=${it.setNumber}" }}")
+        
+        val setToRemove = exercise.sets.find { it.setLog.id == setId }
+        if (setToRemove == null) {
+            android.util.Log.d("SwipeDebug", "removeSetById: setId=$setId NOT FOUND in exercise sets, returning early")
+            return
+        }
+        android.util.Log.d("SwipeDebug", "removeSetById: found setToRemove id=${setToRemove.setLog.id}, setNumber=${setToRemove.setNumber}")
+        
+        // Remove the set and renumber remaining sets to keep consecutive numbers
+        val remainingSets = exercise.sets.filter { it.setLog.id != setId }
+        android.util.Log.d("SwipeDebug", "removeSetById: remainingSets count=${remainingSets.size}")
+        
+        val renumberedSets = remainingSets
+            .sortedBy { it.setNumber }
+            .mapIndexed { index, set ->
+                val newSetNumber = index + 1
+                if (set.setNumber != newSetNumber) {
+                    // Update set number in the SetLog
+                    val updatedSetLog = set.setLog.copy(setNumber = newSetNumber)
+                    set.copy(setNumber = newSetNumber, setLog = updatedSetLog)
+                } else {
+                    set
+                }
+            }
+        
+        android.util.Log.d("SwipeDebug", "removeSetById: renumberedSets: ${renumberedSets.map { "id=${it.setLog.id},num=${it.setNumber}" }}")
+        
+        // Update local state immediately
+        currentExercises[exerciseIndex] = exercise.copy(sets = renumberedSets)
+        _exercises.value = currentExercises
+        android.util.Log.d("SwipeDebug", "removeSetById: state updated, exercise now has ${renumberedSets.size} sets")
+        
+        scope.launch {
+            // Delete from database
+            database.sessionDao().deleteSetLog(setId)
+            
+            // Update renumbered sets in database
+            val setsToUpdate = renumberedSets
+                .filter { set -> remainingSets.any { it.setLog.id == set.setLog.id && it.setNumber != set.setNumber } }
+                .map { it.setLog }
+            if (setsToUpdate.isNotEmpty()) {
+                database.sessionDao().updateSetLogs(setsToUpdate)
+            }
+        }
+    }
+    
+    /**
+     * Removes an exercise from the workout.
+     */
+    fun removeExercise(exerciseIndex: Int) {
+        val currentExercises = _exercises.value.toMutableList()
+        if (exerciseIndex >= currentExercises.size) return
+        
+        val exerciseToRemove = currentExercises[exerciseIndex]
+        
+        scope.launch {
+            // Delete from database - this will cascade delete all set logs
+            database.sessionDao().deleteExerciseLog(exerciseToRemove.exerciseLog.id)
         }
         
         // Update local state
-        val updatedSets = exercise.sets.filter { it.setNumber != setNumber }
-        currentExercises[exerciseIndex] = exercise.copy(sets = updatedSets)
+        currentExercises.removeAt(exerciseIndex)
         _exercises.value = currentExercises
     }
     
@@ -477,11 +611,19 @@ class ActiveWorkoutState(
     fun subtractTimerTime() = timerManager.subtractTime(5)
     
     /**
+     * Cleans up resources. Should be called when the screen is disposed.
+     */
+    fun cleanup() {
+        timerManager.unregister()
+    }
+    
+    /**
      * Finishes the workout.
      */
     suspend fun finishWorkout() {
         database.sessionDao().completeWorkout(sessionId)
         timerManager.cancel()
+        timerManager.unregister()
     }
     
     /**
@@ -490,5 +632,6 @@ class ActiveWorkoutState(
     suspend fun cancelWorkout() {
         database.sessionDao().deleteSession(sessionId)
         timerManager.cancel()
+        timerManager.unregister()
     }
 }

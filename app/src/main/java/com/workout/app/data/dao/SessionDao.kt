@@ -224,4 +224,39 @@ interface SessionDao {
         exerciseName: String,
         currentSessionId: Long
     ): List<PreviousSetData>
+    
+    /**
+     * Data class for historical lift data including session date and RPE.
+     */
+    data class HistoricalSetData(
+        val sessionId: Long,
+        val sessionDate: Long,
+        val setNumber: Int,
+        val setType: SetType,
+        val weightLbs: Float?,
+        val reps: Int?,
+        val rpe: Float?
+    )
+    
+    /**
+     * Get historical lift data for an exercise across all completed sessions.
+     * Returns sets grouped by session, ordered by date descending.
+     * 
+     * @param exerciseName The exercise name to find
+     * @param limit Maximum number of sessions to return
+     */
+    @Query("""
+        SELECT ws.id as sessionId, ws.completedAt as sessionDate, 
+               sl.setNumber, sl.setType, sl.weightLbs, sl.reps, sl.rpe
+        FROM set_logs sl
+        INNER JOIN exercise_logs el ON sl.exerciseLogId = el.id
+        INNER JOIN workout_sessions ws ON el.sessionId = ws.id
+        WHERE el.exerciseName = :exerciseName
+          AND ws.isCompleted = 1
+          AND ws.completedAt IS NOT NULL
+        ORDER BY ws.completedAt DESC, sl.setNumber ASC
+    """)
+    suspend fun getHistoricalSetsForExercise(
+        exerciseName: String
+    ): List<HistoricalSetData>
 }

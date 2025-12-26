@@ -35,6 +35,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -56,6 +57,8 @@ import kotlinx.coroutines.launch
  * A visual display for the rest timer.
  * Shows a circular progress indicator with time remaining and controls.
  * Can be minimized to show just the time remaining.
+ * 
+ * @param startExpanded Whether to start in expanded mode (true) or minimized (false)
  */
 @Composable
 fun RestTimerDisplay(
@@ -65,9 +68,18 @@ fun RestTimerDisplay(
     onSkip: () -> Unit,
     onAddTime: () -> Unit,
     onSubtractTime: () -> Unit = {},
+    startExpanded: Boolean = true,
     modifier: Modifier = Modifier
 ) {
-    var isExpanded by remember { mutableStateOf(true) }
+    var isExpanded by remember { mutableStateOf(startExpanded) }
+    
+    // Reset expanded state when a new timer starts (totalSeconds changes to a new value)
+    LaunchedEffect(timerState.totalSeconds) {
+        if (timerState.totalSeconds > 0) {
+            isExpanded = startExpanded
+        }
+    }
+    
     val animatedProgress by animateFloatAsState(
         targetValue = timerState.progress,
         animationSpec = tween(durationMillis = 300),

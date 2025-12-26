@@ -17,7 +17,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -47,6 +49,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -68,7 +71,6 @@ import com.workout.app.ui.theme.DarkBackground
 import com.workout.app.ui.theme.DropSetColor
 import com.workout.app.ui.theme.InputFieldBackground
 import com.workout.app.ui.theme.InputFieldBorder
-import com.workout.app.ui.theme.NeonCyan
 import com.workout.app.ui.theme.WarmupColor
 import com.workout.app.util.SettingsManager
 
@@ -113,6 +115,7 @@ fun TemplateEditorScreen(
     initialExercises: List<EditableExercise> = emptyList(),
     onSave: (name: String, exercises: List<EditableExercise>) -> Unit = { _, _ -> },
     onBack: () -> Unit = {},
+    onExerciseNameClick: (exerciseName: String) -> Unit = {},
     settingsManager: SettingsManager? = null,
     customExercises: kotlinx.coroutines.flow.Flow<List<com.workout.app.data.entities.CustomExercise>> = kotlinx.coroutines.flow.flowOf(emptyList()),
     onCreateCustomExercise: (com.workout.app.data.entities.CustomExercise) -> Unit = {},
@@ -156,7 +159,7 @@ fun TemplateEditorScreen(
                             imageVector = Icons.Default.Check,
                             contentDescription = "Save",
                             tint = if (canSave) {
-                                NeonCyan
+                                MaterialTheme.colorScheme.primary
                             } else {
                                 MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
                             }
@@ -342,6 +345,9 @@ fun TemplateEditorScreen(
                                 exercises.forEachIndexed { i, ex ->
                                     exercises[i] = ex.copy(orderIndex = i)
                                 }
+                            },
+                            onExerciseNameClick = {
+                                onExerciseNameClick(exercise.exerciseName)
                             }
                         )
                     }
@@ -392,6 +398,7 @@ private fun EditableExerciseCard(
     onAddSet: () -> Unit,
     onRemoveSet: (setIndex: Int) -> Unit,
     onDelete: () -> Unit,
+    onExerciseNameClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var showRestPicker by remember { mutableStateOf<Int?>(null) } // setIndex when showing
@@ -443,7 +450,9 @@ private fun EditableExerciseCard(
                         fontWeight = FontWeight.SemiBold
                     ),
                     color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier
+                        .weight(1f)
+                        .clickable { onExerciseNameClick() }
                 )
                 
                 // Reorder and delete
@@ -697,7 +706,7 @@ private fun TemplateSetRow(
         ) {
             // Set type indicator - clickable
             val (typeText, typeColor) = when (set.setType) {
-                SetType.REGULAR -> "$displayNumber" to NeonCyan
+                SetType.REGULAR -> "$displayNumber" to MaterialTheme.colorScheme.primary
                 SetType.WARMUP -> "W" to WarmupColor
                 SetType.DROP_SET -> "D" to DropSetColor
             }
@@ -797,14 +806,14 @@ private fun TemplateSetRow(
                     Icon(
                         imageVector = Icons.Outlined.Timer,
                         contentDescription = null,
-                        tint = NeonCyan,
+                        tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(14.dp)
                     )
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
                         text = formatRestTime(restSeconds ?: 90),
                         style = MaterialTheme.typography.labelMedium,
-                        color = NeonCyan
+                        color = MaterialTheme.colorScheme.primary
                     )
                 }
             }
@@ -852,7 +861,7 @@ private fun TemplateInputField(
             ),
             singleLine = true,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-            cursorBrush = SolidColor(NeonCyan),
+            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 8.dp),
@@ -889,7 +898,14 @@ private fun TemplateRestTimePicker(
     onTimeSelected: (Int) -> Unit,
     onDismiss: () -> Unit
 ) {
+    // Quick preset options (most common rest times)
+    val presets = listOf(30, 60, 90, 120, 180)
+    
+    var showCustomPicker by remember { mutableStateOf(false) }
     var selectedTime by remember { mutableStateOf(currentSeconds) }
+    
+    // Check if current value is a preset or custom
+    val isCustomValue = currentSeconds !in presets
     
     BasicAlertDialog(onDismissRequest = onDismiss) {
         Surface(
@@ -907,53 +923,200 @@ private fun TemplateRestTimePicker(
                     fontWeight = FontWeight.SemiBold
                 )
                 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(20.dp))
                 
-                // Time display
-                Text(
-                    text = formatRestTime(selectedTime),
-                    style = MaterialTheme.typography.displaySmall,
-                    color = NeonCyan,
-                    fontWeight = FontWeight.Bold
-                )
-                
-                Spacer(modifier = Modifier.height(16.dp))
-                
-                // Quick select buttons
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    listOf(60, 90, 120, 180).forEach { seconds ->
+                if (showCustomPicker) {
+                    // Custom time picker with scrollable list
+                    TemplateCustomTimePicker(
+                        currentSeconds = selectedTime,
+                        onTimeSelected = { time ->
+                            selectedTime = time
+                        }
+                    )
+                    
+                    Spacer(modifier = Modifier.height(16.dp))
+                    
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        // Back button
+                        TextButton(onClick = { showCustomPicker = false }) {
+                            Text("Back")
+                        }
+                        
+                        // Confirm button
                         Surface(
-                            onClick = { selectedTime = seconds },
-                            shape = RoundedCornerShape(8.dp),
-                            color = if (selectedTime == seconds) {
-                                NeonCyan.copy(alpha = 0.2f)
-                            } else {
-                                MaterialTheme.colorScheme.surfaceVariant
-                            }
+                            onClick = { onTimeSelected(selectedTime) },
+                            shape = RoundedCornerShape(20.dp),
+                            color = MaterialTheme.colorScheme.primary
                         ) {
                             Text(
-                                text = formatRestTime(seconds),
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                                color = if (selectedTime == seconds) NeonCyan else MaterialTheme.colorScheme.onSurfaceVariant
+                                text = "Set ${formatRestTime(selectedTime)}",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.onPrimary,
+                                modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp)
                             )
                         }
                     }
-                }
-                
-                Spacer(modifier = Modifier.height(24.dp))
-                
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End
-                ) {
+                } else {
+                    // Quick preset chips
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        // Row 1: 30s, 1:00, 1:30
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            presets.take(3).forEach { seconds ->
+                                TemplatePresetChip(
+                                    text = formatRestTime(seconds),
+                                    isSelected = currentSeconds == seconds,
+                                    onClick = { onTimeSelected(seconds) },
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                        }
+                        
+                        // Row 2: 2:00, 3:00, Custom
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            presets.drop(3).forEach { seconds ->
+                                TemplatePresetChip(
+                                    text = formatRestTime(seconds),
+                                    isSelected = currentSeconds == seconds,
+                                    onClick = { onTimeSelected(seconds) },
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                            
+                            // Custom button
+                            TemplatePresetChip(
+                                text = if (isCustomValue) formatRestTime(currentSeconds) else "Custom",
+                                isSelected = isCustomValue,
+                                onClick = { 
+                                    selectedTime = currentSeconds
+                                    showCustomPicker = true 
+                                },
+                                modifier = Modifier.weight(1f),
+                                isCustom = true
+                            )
+                        }
+                    }
+                    
+                    Spacer(modifier = Modifier.height(16.dp))
+                    
+                    // Cancel button
                     TextButton(onClick = onDismiss) {
                         Text("Cancel")
                     }
-                    TextButton(onClick = { onTimeSelected(selectedTime) }) {
-                        Text("Set", color = NeonCyan)
-                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TemplatePresetChip(
+    text: String,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    isCustom: Boolean = false
+) {
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(12.dp),
+        color = when {
+            isSelected -> MaterialTheme.colorScheme.primary
+            isCustom -> MaterialTheme.colorScheme.tertiary.copy(alpha = 0.15f)
+            else -> MaterialTheme.colorScheme.surfaceVariant
+        },
+        modifier = modifier
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.bodyMedium.copy(
+                fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium
+            ),
+            color = when {
+                isSelected -> MaterialTheme.colorScheme.onPrimary
+                isCustom -> MaterialTheme.colorScheme.tertiary
+                else -> MaterialTheme.colorScheme.onSurfaceVariant
+            },
+            textAlign = TextAlign.Center,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 12.dp)
+        )
+    }
+}
+
+@Composable
+private fun TemplateCustomTimePicker(
+    currentSeconds: Int,
+    onTimeSelected: (Int) -> Unit
+) {
+    // Generate time options from 0:15 to 10:00 in 15-second increments
+    val timeOptions = remember {
+        (15..600 step 15).toList()
+    }
+    
+    val listState = rememberLazyListState()
+    
+    // Find initial index
+    val initialIndex = remember(currentSeconds) {
+        timeOptions.indexOfFirst { it >= currentSeconds }.coerceAtLeast(0)
+    }
+    
+    LaunchedEffect(Unit) {
+        // Scroll to center the current selection
+        listState.scrollToItem((initialIndex - 2).coerceAtLeast(0))
+    }
+    
+    Box(
+        modifier = Modifier
+            .height(180.dp)
+            .fillMaxWidth()
+    ) {
+        LazyColumn(
+            state = listState,
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            items(timeOptions) { seconds ->
+                val isSelected = seconds == currentSeconds
+                
+                Surface(
+                    onClick = { onTimeSelected(seconds) },
+                    shape = RoundedCornerShape(12.dp),
+                    color = if (isSelected) {
+                        MaterialTheme.colorScheme.primaryContainer
+                    } else {
+                        Color.Transparent
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 2.dp, horizontal = 16.dp)
+                ) {
+                    Text(
+                        text = formatRestTime(seconds),
+                        style = MaterialTheme.typography.titleLarge.copy(
+                            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
+                        ),
+                        color = if (isSelected) {
+                            MaterialTheme.colorScheme.onPrimaryContainer
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                        },
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 8.dp)
+                    )
                 }
             }
         }

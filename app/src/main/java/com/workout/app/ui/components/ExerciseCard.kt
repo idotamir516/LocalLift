@@ -1,5 +1,6 @@
 package com.workout.app.ui.components
 
+import android.util.Log
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -10,6 +11,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -20,6 +22,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.outlined.FitnessCenter
@@ -27,6 +30,7 @@ import androidx.compose.material.icons.outlined.SwapVert
 import androidx.compose.material.icons.outlined.Timer
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -34,20 +38,24 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
+import androidx.compose.material3.SwipeToDismissBox
+import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import com.workout.app.ui.theme.NeonCyan
 
 /**
  * Data class representing a set within an exercise.
@@ -58,6 +66,7 @@ import com.workout.app.data.entities.SetType
  * Data class representing a set within an exercise.
  */
 data class SetData(
+    val id: Long,  // Stable database ID for composition key
     val setNumber: Int,
     val weight: Int? = null,
     val reps: Int? = null,
@@ -85,8 +94,9 @@ data class SetData(
  * @param onSetRestChange Callback when a set's rest time changes
  * @param onSetTypeChange Callback when a set's type changes (Regular/Warmup/Drop)
  * @param onSetComplete Callback when a set is marked complete
- * @param onSetRemove Callback when a set is removed
+ * @param onSetRemove Callback when a set is removed (by stable id)
  * @param onAddSet Callback to add a new set
+ * @param onExerciseNameClick Callback when exercise name is clicked (for details popup)
  * @param onMoveUp Callback to move exercise up
  * @param onMoveDown Callback to move exercise down
  * @param modifier Optional modifier for the card
@@ -107,8 +117,10 @@ fun ExerciseCard(
     onSetTypeChange: (setNumber: Int, setType: SetType) -> Unit = { _, _ -> },
     onSetRpeChange: (setNumber: Int, rpe: Float?) -> Unit = { _, _ -> },
     onSetComplete: (setNumber: Int) -> Unit,
-    onSetRemove: (setNumber: Int) -> Unit = {},
+    onSetRemove: (setId: Long) -> Unit = {},
     onAddSet: () -> Unit,
+    onExerciseNameClick: () -> Unit = {},
+    onRemoveExercise: () -> Unit = {},
     onMoveUp: () -> Unit = {},
     onMoveDown: () -> Unit = {},
     modifier: Modifier = Modifier
@@ -127,8 +139,8 @@ fun ExerciseCard(
             .fillMaxWidth()
             .animateContentSize(),
         shape = RoundedCornerShape(20.dp),
-        color = MaterialTheme.colorScheme.surface,
-        tonalElevation = 2.dp
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+        tonalElevation = 0.dp
     ) {
         Column(
             modifier = Modifier.padding(16.dp)
@@ -148,7 +160,7 @@ fun ExerciseCard(
                         .background(
                             Brush.linearGradient(
                                 colors = if (completedSets == totalSets && totalSets > 0) {
-                                    listOf(NeonCyan.copy(alpha = 0.3f), NeonCyan.copy(alpha = 0.1f))
+                                    listOf(MaterialTheme.colorScheme.primary.copy(alpha = 0.3f), MaterialTheme.colorScheme.primary.copy(alpha = 0.1f))
                                 } else {
                                     listOf(
                                         MaterialTheme.colorScheme.primary.copy(alpha = 0.2f),
@@ -163,7 +175,7 @@ fun ExerciseCard(
                         imageVector = Icons.Outlined.FitnessCenter,
                         contentDescription = null,
                         modifier = Modifier.size(22.dp),
-                        tint = if (completedSets == totalSets && totalSets > 0) NeonCyan else MaterialTheme.colorScheme.primary
+                        tint = if (completedSets == totalSets && totalSets > 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.primary
                     )
                 }
                 
@@ -175,7 +187,8 @@ fun ExerciseCard(
                         style = MaterialTheme.typography.titleMedium.copy(
                             fontWeight = FontWeight.SemiBold
                         ),
-                        color = MaterialTheme.colorScheme.onSurface
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.clickable { onExerciseNameClick() }
                     )
                     
                     Spacer(modifier = Modifier.height(4.dp))
@@ -191,7 +204,7 @@ fun ExerciseCard(
                                 .weight(1f)
                                 .height(4.dp)
                                 .clip(RoundedCornerShape(2.dp)),
-                            color = if (completedSets == totalSets && totalSets > 0) NeonCyan else MaterialTheme.colorScheme.primary,
+                            color = if (completedSets == totalSets && totalSets > 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.primary,
                             trackColor = MaterialTheme.colorScheme.surfaceVariant,
                             strokeCap = StrokeCap.Round
                         )
@@ -201,7 +214,7 @@ fun ExerciseCard(
                             style = MaterialTheme.typography.labelSmall.copy(
                                 fontWeight = FontWeight.Medium
                             ),
-                            color = if (completedSets == totalSets && totalSets > 0) NeonCyan else MaterialTheme.colorScheme.onSurfaceVariant
+                            color = if (completedSets == totalSets && totalSets > 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
@@ -238,6 +251,19 @@ fun ExerciseCard(
                             } else {
                                 MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f)
                             }
+                        )
+                    }
+                    
+                    // Delete exercise button
+                    IconButton(
+                        onClick = onRemoveExercise,
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Delete,
+                            contentDescription = "Remove exercise",
+                            modifier = Modifier.size(18.dp),
+                            tint = MaterialTheme.colorScheme.error.copy(alpha = 0.7f)
                         )
                     }
                 }
@@ -336,7 +362,7 @@ fun ExerciseCard(
                 // Warmup and drop sets don't count toward the regular set number
                 var regularSetCounter = 0
                 
-                // Set rows with integrated rest timer
+                // Set rows with swipe-to-delete
                 sets.forEach { setData ->
                     // Calculate display number: only increment for regular sets
                     val displayNumber = if (setData.setType == SetType.REGULAR) {
@@ -346,42 +372,22 @@ fun ExerciseCard(
                         0 // Won't be displayed for W/D sets
                     }
                     
-                    SetRow(
-                        setNumber = setData.setNumber,
-                        displayNumber = displayNumber,
-                        weight = setData.weight,
-                        reps = setData.reps,
-                        isCompleted = setData.isCompleted,
-                        previousWeight = setData.previousWeight,
-                        previousReps = setData.previousReps,
-                        restSeconds = setData.restSeconds,
-                        setType = setData.setType,
-                        showRemoveButton = showRemoveSetButton && sets.size > 1,
-                        showRpe = showRpe,
-                        rpe = setData.rpe,
-                        onWeightChange = { weight ->
-                            onSetWeightChange(setData.setNumber, weight)
-                        },
-                        onRepsChange = { reps ->
-                            onSetRepsChange(setData.setNumber, reps)
-                        },
-                        onRestChange = { restSeconds ->
-                            onSetRestChange(setData.setNumber, restSeconds)
-                        },
-                        onSetTypeChange = { newType ->
-                            onSetTypeChange(setData.setNumber, newType)
-                        },
-                        onRpeChange = { rpe ->
-                            onSetRpeChange(setData.setNumber, rpe)
-                        },
-                        onCompleteClick = {
-                            onSetComplete(setData.setNumber)
-                        },
-                        onRemoveClick = {
-                            onSetRemove(setData.setNumber)
-                        },
-                        modifier = Modifier.padding(bottom = 8.dp)
-                    )
+                    // Use stable database ID as key to ensure each set has its own independent dismiss state
+                    // This prevents issues when sets are renumbered after deletion
+                    key(setData.id) {
+                        SwipeableSetRow(
+                            setData = setData,
+                            displayNumber = displayNumber,
+                            showRpe = showRpe,
+                            onSetWeightChange = onSetWeightChange,
+                            onSetRepsChange = onSetRepsChange,
+                            onSetRestChange = onSetRestChange,
+                            onSetTypeChange = onSetTypeChange,
+                            onSetRpeChange = onSetRpeChange,
+                            onSetComplete = onSetComplete,
+                            onSetRemove = onSetRemove
+                        )
+                    }
                 }
                 
                 // Add set button - more minimal
@@ -404,7 +410,7 @@ fun ExerciseCard(
                             imageVector = Icons.Default.Add,
                             contentDescription = null,
                             modifier = Modifier.size(18.dp),
-                            tint = NeonCyan
+                            tint = MaterialTheme.colorScheme.primary
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
@@ -412,7 +418,7 @@ fun ExerciseCard(
                             style = MaterialTheme.typography.labelLarge.copy(
                                 fontWeight = FontWeight.Medium
                             ),
-                            color = NeonCyan
+                            color = MaterialTheme.colorScheme.primary
                         )
                     }
                 }
@@ -420,3 +426,113 @@ fun ExerciseCard(
         }
     }
 }
+
+/**
+ * A swipeable wrapper for SetRow that allows swipe-to-delete functionality.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SwipeableSetRow(
+    setData: SetData,
+    displayNumber: Int,
+    showRpe: Boolean,
+    onSetWeightChange: (setNumber: Int, weight: Int?) -> Unit,
+    onSetRepsChange: (setNumber: Int, reps: Int?) -> Unit,
+    onSetRestChange: (setNumber: Int, restSeconds: Int?) -> Unit,
+    onSetTypeChange: (setNumber: Int, setType: SetType) -> Unit,
+    onSetRpeChange: (setNumber: Int, rpe: Float?) -> Unit,
+    onSetComplete: (setNumber: Int) -> Unit,
+    onSetRemove: (setId: Long) -> Unit
+) {
+    Log.d("SwipeDebug", "SwipeableSetRow composing: id=${setData.id}, setNumber=${setData.setNumber}")
+    
+    val dismissState = rememberSwipeToDismissBoxState(
+        confirmValueChange = { dismissValue ->
+            Log.d("SwipeDebug", "confirmValueChange called: id=${setData.id}, setNumber=${setData.setNumber}, dismissValue=$dismissValue")
+            if (dismissValue == SwipeToDismissBoxValue.EndToStart) {
+                Log.d("SwipeDebug", "Calling onSetRemove for id=${setData.id}")
+                onSetRemove(setData.id)
+            }
+            // Always return false so the UI resets to non-dismissed state
+            // The actual deletion happens via onSetRemove callback above
+            Log.d("SwipeDebug", "confirmValueChange returning false")
+            false
+        }
+    )
+    
+    // Log the current dismiss state
+    Log.d("SwipeDebug", "Current dismissState: id=${setData.id}, currentValue=${dismissState.currentValue}, targetValue=${dismissState.targetValue}")
+    
+    SwipeToDismissBox(
+        state = dismissState,
+        backgroundContent = {
+                // Delete background shown when swiping
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(MaterialTheme.colorScheme.error.copy(alpha = 0.2f))
+                        .padding(horizontal = 16.dp),
+                    contentAlignment = Alignment.CenterEnd
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = "Delete",
+                            style = MaterialTheme.typography.bodyMedium.copy(
+                                fontWeight = FontWeight.SemiBold
+                            ),
+                            color = MaterialTheme.colorScheme.error
+                        )
+                        Icon(
+                            imageVector = Icons.Default.Delete,
+                            contentDescription = "Delete set",
+                            tint = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+            },
+            enableDismissFromStartToEnd = false,
+            enableDismissFromEndToStart = true
+        ) {
+            SetRow(
+                setNumber = setData.setNumber,
+                displayNumber = displayNumber,
+                weight = setData.weight,
+                reps = setData.reps,
+                isCompleted = setData.isCompleted,
+                previousWeight = setData.previousWeight,
+                previousReps = setData.previousReps,
+                restSeconds = setData.restSeconds,
+                setType = setData.setType,
+                showRemoveButton = false,
+                showRpe = showRpe,
+                rpe = setData.rpe,
+                onWeightChange = { weight ->
+                    onSetWeightChange(setData.setNumber, weight)
+                },
+                onRepsChange = { reps ->
+                    onSetRepsChange(setData.setNumber, reps)
+                },
+                onRestChange = { restSeconds ->
+                    onSetRestChange(setData.setNumber, restSeconds)
+                },
+                onSetTypeChange = { newType ->
+                    onSetTypeChange(setData.setNumber, newType)
+                },
+                onRpeChange = { rpe ->
+                    onSetRpeChange(setData.setNumber, rpe)
+                },
+                onCompleteClick = {
+                    onSetComplete(setData.setNumber)
+                },
+                onRemoveClick = { },
+                modifier = Modifier
+                    .background(MaterialTheme.colorScheme.surface)
+                    .padding(bottom = 8.dp)
+            )
+        }
+    }

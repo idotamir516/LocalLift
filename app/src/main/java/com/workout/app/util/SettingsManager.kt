@@ -2,6 +2,7 @@ package com.workout.app.util
 
 import android.content.Context
 import android.content.SharedPreferences
+import com.workout.app.ui.theme.AppTheme
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -57,6 +58,17 @@ class SettingsManager(context: Context) {
     private val _estimatedSecondsPerSet = MutableStateFlow(prefs.getInt(KEY_ESTIMATED_SECONDS_PER_SET, DEFAULT_ESTIMATED_SECONDS_PER_SET))
     val estimatedSecondsPerSet: StateFlow<Int> = _estimatedSecondsPerSet.asStateFlow()
     
+    private val _timerStartsMinimized = MutableStateFlow(prefs.getBoolean(KEY_TIMER_STARTS_MINIMIZED, DEFAULT_TIMER_STARTS_MINIMIZED))
+    val timerStartsMinimized: StateFlow<Boolean> = _timerStartsMinimized.asStateFlow()
+    
+    private val _appTheme = MutableStateFlow(
+        AppTheme.valueOf(prefs.getString(KEY_APP_THEME, DEFAULT_APP_THEME.name) ?: DEFAULT_APP_THEME.name)
+    )
+    val appTheme: StateFlow<AppTheme> = _appTheme.asStateFlow()
+    
+    private val _vibrantColors = MutableStateFlow(prefs.getBoolean(KEY_VIBRANT_COLORS, DEFAULT_VIBRANT_COLORS))
+    val vibrantColors: StateFlow<Boolean> = _vibrantColors.asStateFlow()
+    
     // Setters
     fun setDefaultRestSeconds(seconds: Int) {
         prefs.edit().putInt(KEY_DEFAULT_REST_SECONDS, seconds).apply()
@@ -103,6 +115,21 @@ class SettingsManager(context: Context) {
         _estimatedSecondsPerSet.value = seconds
     }
     
+    fun setTimerStartsMinimized(minimized: Boolean) {
+        prefs.edit().putBoolean(KEY_TIMER_STARTS_MINIMIZED, minimized).apply()
+        _timerStartsMinimized.value = minimized
+    }
+    
+    fun setAppTheme(theme: AppTheme) {
+        prefs.edit().putString(KEY_APP_THEME, theme.name).apply()
+        _appTheme.value = theme
+    }
+    
+    fun setVibrantColors(vibrant: Boolean) {
+        prefs.edit().putBoolean(KEY_VIBRANT_COLORS, vibrant).apply()
+        _vibrantColors.value = vibrant
+    }
+    
     // Synchronous getters for non-reactive use
     fun getDefaultRestSecondsSync(): Int = prefs.getInt(KEY_DEFAULT_REST_SECONDS, DEFAULT_REST_SECONDS)
     fun getDefaultSetsPerExerciseSync(): Int = prefs.getInt(KEY_DEFAULT_SETS, DEFAULT_SETS)
@@ -115,6 +142,11 @@ class SettingsManager(context: Context) {
     fun getCountWarmupAsEffectiveSync(): Boolean = prefs.getBoolean(KEY_COUNT_WARMUP_EFFECTIVE, DEFAULT_COUNT_WARMUP_EFFECTIVE)
     fun getCountDropSetAsEffectiveSync(): Boolean = prefs.getBoolean(KEY_COUNT_DROPSET_EFFECTIVE, DEFAULT_COUNT_DROPSET_EFFECTIVE)
     fun getEstimatedSecondsPerSetSync(): Int = prefs.getInt(KEY_ESTIMATED_SECONDS_PER_SET, DEFAULT_ESTIMATED_SECONDS_PER_SET)
+    fun getTimerStartsMinimizedSync(): Boolean = prefs.getBoolean(KEY_TIMER_STARTS_MINIMIZED, DEFAULT_TIMER_STARTS_MINIMIZED)
+    fun getAppThemeSync(): AppTheme = AppTheme.valueOf(
+        prefs.getString(KEY_APP_THEME, DEFAULT_APP_THEME.name) ?: DEFAULT_APP_THEME.name
+    )
+    fun getVibrantColorsSync(): Boolean = prefs.getBoolean(KEY_VIBRANT_COLORS, DEFAULT_VIBRANT_COLORS)
     
     companion object {
         private const val PREFS_NAME = "workout_app_settings"
@@ -129,6 +161,9 @@ class SettingsManager(context: Context) {
         private const val KEY_COUNT_WARMUP_EFFECTIVE = "count_warmup_effective"
         private const val KEY_COUNT_DROPSET_EFFECTIVE = "count_dropset_effective"
         private const val KEY_ESTIMATED_SECONDS_PER_SET = "estimated_seconds_per_set"
+        private const val KEY_TIMER_STARTS_MINIMIZED = "timer_starts_minimized"
+        private const val KEY_APP_THEME = "app_theme"
+        private const val KEY_VIBRANT_COLORS = "vibrant_colors"
         
         // Defaults
         const val DEFAULT_REST_SECONDS = 90
@@ -140,6 +175,9 @@ class SettingsManager(context: Context) {
         const val DEFAULT_COUNT_WARMUP_EFFECTIVE = false
         const val DEFAULT_COUNT_DROPSET_EFFECTIVE = true
         const val DEFAULT_ESTIMATED_SECONDS_PER_SET = 45
+        const val DEFAULT_TIMER_STARTS_MINIMIZED = false
+        val DEFAULT_APP_THEME = AppTheme.CYAN
+        const val DEFAULT_VIBRANT_COLORS = true
         
         @Volatile
         private var instance: SettingsManager? = null

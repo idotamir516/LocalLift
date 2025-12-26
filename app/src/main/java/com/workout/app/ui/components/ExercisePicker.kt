@@ -67,10 +67,67 @@ import com.workout.app.data.AppDatabase
 import com.workout.app.data.Exercise
 import com.workout.app.data.ExerciseLibrary
 import com.workout.app.data.entities.CustomExercise
-import com.workout.app.ui.theme.NeonCyan
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
+import kotlin.math.min
+
+/**
+ * Calculates a fuzzy match score for a search query against a target string.
+ * Returns a score where lower is better, or null if no match.
+ * 
+ * Matching strategies (in order of priority):
+ * 1. Exact match (score: 0)
+ * 2. Starts with query (score: 1)
+ * 3. Contains query as substring (score: 2)
+ * 4. Word initials match (e.g., "bp" matches "Bench Press") (score: 3)
+ * 5. All query chars appear in order (e.g., "bnchprs" matches "Bench Press") (score: 4 + gap penalty)
+ */
+private fun fuzzyMatchScore(query: String, target: String): Int? {
+    val queryLower = query.lowercase()
+    val targetLower = target.lowercase()
+    
+    // Exact match
+    if (queryLower == targetLower) return 0
+    
+    // Starts with
+    if (targetLower.startsWith(queryLower)) return 1
+    
+    // Contains as substring
+    if (targetLower.contains(queryLower)) return 2
+    
+    // Word initials match (e.g., "bp" matches "Bench Press")
+    val words = targetLower.split(" ", "-", "_")
+    val initials = words.mapNotNull { it.firstOrNull() }.joinToString("")
+    if (initials.startsWith(queryLower)) return 3
+    
+    // Check if initials contain the query
+    if (queryLower.length <= initials.length && initials.contains(queryLower)) return 3
+    
+    // Fuzzy match: all query chars appear in order
+    var queryIndex = 0
+    var gapPenalty = 0
+    var lastMatchIndex = -1
+    
+    for ((i, char) in targetLower.withIndex()) {
+        if (queryIndex < queryLower.length && char == queryLower[queryIndex]) {
+            // Add gap penalty for non-consecutive matches
+            if (lastMatchIndex >= 0 && i > lastMatchIndex + 1) {
+                gapPenalty += min(i - lastMatchIndex - 1, 3) // Cap gap penalty
+            }
+            lastMatchIndex = i
+            queryIndex++
+        }
+    }
+    
+    // All query characters found in order
+    if (queryIndex == queryLower.length) {
+        return 4 + gapPenalty
+    }
+    
+    // No match
+    return null
+}
 
 /**
  * A bottom sheet component for selecting exercises from the library.
@@ -127,12 +184,20 @@ fun ExercisePicker(
             }
             
             if (searchQuery.isNotBlank()) {
-                result = result.filter { 
-                    it.name.contains(searchQuery, ignoreCase = true) 
-                }
+                // Use fuzzy search and sort by match quality
+                result = result
+                    .mapNotNull { exercise ->
+                        fuzzyMatchScore(searchQuery, exercise.name)?.let { score ->
+                            exercise to score
+                        }
+                    }
+                    .sortedWith(compareBy({ it.second }, { it.first.name }))
+                    .map { it.first }
+            } else {
+                result = result.sortedBy { it.name }
             }
             
-            result.sortedBy { it.name }
+            result
         }
         
         // Track which exercises are custom (for showing delete option)
@@ -307,12 +372,12 @@ fun ExercisePicker(
                         }
                     } else {
                         items(allExercises) { exercise ->
-                            val isSelected = selectedExercises.contains(exercise.name)
+                            val isAlreadyAdded = selectedExercises.contains(exercise.name)
                             val isCustom = customExerciseNames.contains(exercise.name)
                             
                             ExerciseListItem(
                                 exercise = exercise,
-                                isSelected = isSelected,
+                                isAlreadyAdded = isAlreadyAdded,
                                 isCustom = isCustom,
                                 onClick = { onExerciseSelected(exercise) },
                                 onDelete = if (isCustom) {
@@ -348,7 +413,7 @@ fun ExercisePicker(
 @Composable
 private fun ExerciseListItem(
     exercise: Exercise,
-    isSelected: Boolean,
+    isAlreadyAdded: Boolean,
     isCustom: Boolean = false,
     onClick: () -> Unit,
     onDelete: (() -> Unit)? = null,
@@ -362,11 +427,7 @@ private fun ExerciseListItem(
             .padding(vertical = 4.dp)
             .clickable { onClick() },
         shape = RoundedCornerShape(12.dp),
-        color = if (isSelected) {
-            MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
-        } else {
-            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
-        }
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
     ) {
         Row(
             modifier = Modifier
@@ -379,28 +440,19 @@ private fun ExerciseListItem(
                     .size(40.dp)
                     .clip(RoundedCornerShape(10.dp))
                     .background(
-                        if (isSelected) {
-                            Brush.linearGradient(
-                                colors = listOf(
-                                    NeonCyan.copy(alpha = 0.3f),
-                                    NeonCyan.copy(alpha = 0.1f)
-                                )
+                        Brush.linearGradient(
+                            colors = listOf(
+                                MaterialTheme.colorScheme.outline.copy(alpha = 0.2f),
+                                MaterialTheme.colorScheme.outline.copy(alpha = 0.1f)
                             )
-                        } else {
-                            Brush.linearGradient(
-                                colors = listOf(
-                                    MaterialTheme.colorScheme.outline.copy(alpha = 0.2f),
-                                    MaterialTheme.colorScheme.outline.copy(alpha = 0.1f)
-                                )
-                            )
-                        }
+                        )
                     ),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = Icons.Default.FitnessCenter,
                     contentDescription = null,
-                    tint = if (isSelected) NeonCyan else MaterialTheme.colorScheme.onSurfaceVariant,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.size(20.dp)
                 )
             }
@@ -466,21 +518,14 @@ private fun ExerciseListItem(
                 }
             }
             
-            if (isSelected) {
-                Box(
-                    modifier = Modifier
-                        .size(24.dp)
-                        .clip(CircleShape)
-                        .background(NeonCyan.copy(alpha = 0.2f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Check,
-                        contentDescription = "Selected",
-                        tint = NeonCyan,
-                        modifier = Modifier.size(16.dp)
-                    )
-                }
+            // Show "Added" text for exercises already in the workout
+            if (isAlreadyAdded) {
+                Text(
+                    text = "Added",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                    modifier = Modifier.padding(start = 8.dp)
+                )
             }
         }
     }
