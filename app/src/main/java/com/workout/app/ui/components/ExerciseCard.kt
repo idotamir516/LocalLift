@@ -22,10 +22,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.outlined.FitnessCenter
+import androidx.compose.material.icons.outlined.Notes
 import androidx.compose.material.icons.outlined.SwapVert
 import androidx.compose.material.icons.outlined.Timer
 import androidx.compose.material3.Card
@@ -46,6 +49,9 @@ import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -74,6 +80,7 @@ data class SetData(
     val isCompleted: Boolean = false,
     val previousWeight: Int? = null,
     val previousReps: Int? = null,
+    val previousRpe: Float? = null,
     val restSeconds: Int? = null,
     val setType: SetType = SetType.REGULAR
 )
@@ -88,6 +95,7 @@ data class SetData(
  * @param isFirst Whether this is the first exercise (for move up)
  * @param isLast Whether this is the last exercise (for move down)
  * @param showRemoveSetButton Whether to show remove button on sets
+ * @param note Optional note for this exercise
  * @param onExpandToggle Callback when expand/collapse is toggled
  * @param onSetWeightChange Callback when a set's weight changes
  * @param onSetRepsChange Callback when a set's reps changes
@@ -97,6 +105,7 @@ data class SetData(
  * @param onSetRemove Callback when a set is removed (by stable id)
  * @param onAddSet Callback to add a new set
  * @param onExerciseNameClick Callback when exercise name is clicked (for details popup)
+ * @param onNoteChange Callback when note is changed
  * @param onMoveUp Callback to move exercise up
  * @param onMoveDown Callback to move exercise down
  * @param modifier Optional modifier for the card
@@ -110,6 +119,7 @@ fun ExerciseCard(
     isLast: Boolean = true,
     showRemoveSetButton: Boolean = false,
     showRpe: Boolean = false,
+    note: String? = null,
     onExpandToggle: () -> Unit = {},
     onSetWeightChange: (setNumber: Int, weight: Int?) -> Unit,
     onSetRepsChange: (setNumber: Int, reps: Int?) -> Unit,
@@ -120,6 +130,7 @@ fun ExerciseCard(
     onSetRemove: (setId: Long) -> Unit = {},
     onAddSet: () -> Unit,
     onExerciseNameClick: () -> Unit = {},
+    onNoteChange: (String?) -> Unit = {},
     onRemoveExercise: () -> Unit = {},
     onMoveUp: () -> Unit = {},
     onMoveDown: () -> Unit = {},
@@ -266,6 +277,105 @@ fun ExerciseCard(
                             tint = MaterialTheme.colorScheme.error.copy(alpha = 0.7f)
                         )
                     }
+                }
+            }
+            
+            // Note section (expandable)
+            var showNoteEditor by remember { mutableStateOf(false) }
+            var editedNote by remember(note) { mutableStateOf(note ?: "") }
+            
+            if (note != null || showNoteEditor) {
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                if (showNoteEditor) {
+                    // Editable note field
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.Top,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedTextField(
+                            value = editedNote,
+                            onValueChange = { editedNote = it },
+                            placeholder = { Text("Add a note...", style = MaterialTheme.typography.bodySmall) },
+                            modifier = Modifier.weight(1f),
+                            textStyle = MaterialTheme.typography.bodySmall,
+                            minLines = 1,
+                            maxLines = 3,
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = MaterialTheme.colorScheme.primary,
+                                unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
+                            )
+                        )
+                        IconButton(
+                            onClick = {
+                                val trimmed = editedNote.trim().takeIf { it.isNotEmpty() }
+                                onNoteChange(trimmed)
+                                showNoteEditor = false
+                            },
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Check,
+                                contentDescription = "Save note",
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+                } else {
+                    // Display note with edit option
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f))
+                            .clickable { showNoteEditor = true }
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Notes,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = note ?: "",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Icon(
+                            imageVector = Icons.Default.Edit,
+                            contentDescription = "Edit note",
+                            modifier = Modifier.size(14.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                        )
+                    }
+                }
+            } else {
+                // Add note button
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable { showNoteEditor = true }
+                        .padding(horizontal = 4.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Notes,
+                        contentDescription = null,
+                        modifier = Modifier.size(14.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = "Add note",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                    )
                 }
             }
             
@@ -506,6 +616,7 @@ private fun SwipeableSetRow(
                 isCompleted = setData.isCompleted,
                 previousWeight = setData.previousWeight,
                 previousReps = setData.previousReps,
+                previousRpe = setData.previousRpe,
                 restSeconds = setData.restSeconds,
                 setType = setData.setType,
                 showRemoveButton = false,

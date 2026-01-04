@@ -25,14 +25,16 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FitnessCenter
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.outlined.FitnessCenter
+import androidx.compose.material.icons.outlined.Notes
 import androidx.compose.material.icons.outlined.Timer
 import androidx.compose.material3.BasicAlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -95,7 +97,8 @@ data class EditableExercise(
     val restSeconds: Int? = null,
     val showRpe: Boolean = false,
     val orderIndex: Int = 0,
-    val sets: List<EditableTemplateSet> = (1..3).map { EditableTemplateSet(setNumber = it, restSeconds = restSeconds) }
+    val sets: List<EditableTemplateSet> = (1..3).map { EditableTemplateSet(setNumber = it, restSeconds = restSeconds) },
+    val note: String? = null
 )
 
 /**
@@ -145,7 +148,7 @@ fun TemplateEditorScreen(
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(
-                            imageVector = Icons.Default.ArrowBack,
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Back"
                         )
                     }
@@ -309,6 +312,9 @@ fun TemplateEditorScreen(
                             onShowRpeChange = { showRpe ->
                                 exercises[index] = exercise.copy(showRpe = showRpe)
                             },
+                            onNoteChange = { note ->
+                                exercises[index] = exercise.copy(note = note)
+                            },
                             onSetChange = { setIndex, updatedSet ->
                                 val newSets = exercise.sets.toMutableList()
                                 newSets[setIndex] = updatedSet
@@ -394,6 +400,7 @@ private fun EditableExerciseCard(
     onMoveUp: () -> Unit = {},
     onMoveDown: () -> Unit = {},
     onShowRpeChange: (Boolean) -> Unit,
+    onNoteChange: (String?) -> Unit = {},
     onSetChange: (setIndex: Int, set: EditableTemplateSet) -> Unit,
     onAddSet: () -> Unit,
     onRemoveSet: (setIndex: Int) -> Unit,
@@ -500,6 +507,105 @@ private fun EditableExerciseCard(
                             tint = MaterialTheme.colorScheme.error
                         )
                     }
+                }
+            }
+            
+            // Note section (editable)
+            var showNoteEditor by remember { mutableStateOf(false) }
+            var editedNote by remember(exercise.note) { mutableStateOf(exercise.note ?: "") }
+            
+            if (exercise.note != null || showNoteEditor) {
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                if (showNoteEditor) {
+                    // Editable note field
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.Top,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedTextField(
+                            value = editedNote,
+                            onValueChange = { editedNote = it },
+                            placeholder = { Text("Add a note...", style = MaterialTheme.typography.bodySmall) },
+                            modifier = Modifier.weight(1f),
+                            textStyle = MaterialTheme.typography.bodySmall,
+                            minLines = 1,
+                            maxLines = 3,
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = MaterialTheme.colorScheme.primary,
+                                unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
+                            )
+                        )
+                        IconButton(
+                            onClick = {
+                                val trimmed = editedNote.trim().takeIf { it.isNotEmpty() }
+                                onNoteChange(trimmed)
+                                showNoteEditor = false
+                            },
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Check,
+                                contentDescription = "Save note",
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+                } else {
+                    // Display note with edit option
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f))
+                            .clickable { showNoteEditor = true }
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Notes,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = exercise.note ?: "",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Icon(
+                            imageVector = Icons.Default.Edit,
+                            contentDescription = "Edit note",
+                            modifier = Modifier.size(14.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                        )
+                    }
+                }
+            } else {
+                // Add note button
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable { showNoteEditor = true }
+                        .padding(horizontal = 4.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Notes,
+                        contentDescription = null,
+                        modifier = Modifier.size(14.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = "Add note",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                    )
                 }
             }
             

@@ -28,5 +28,6 @@ data class TemplateExercise(
     val targetSets: Int = 3,
     val restSeconds: Int? = null,
     val showRpe: Boolean = false,
-    val orderIndex: Int
+    val orderIndex: Int,
+    val note: String? = null
 )

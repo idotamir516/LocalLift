@@ -30,6 +30,11 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Snackbar
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -55,6 +60,7 @@ import com.workout.app.ui.components.RestTimerDisplay
 import com.workout.app.ui.components.SetData
 import com.workout.app.util.TimerState
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.SharedFlow
 
 /**
  * Data class representing an exercise with its sets during an active workout.
@@ -65,7 +71,9 @@ data class ActiveExercise(
     val restSeconds: Int? = null,
     val showRpe: Boolean = false,
     val sets: List<ActiveSet> = emptyList(),
-    val isExpanded: Boolean = true
+    val isExpanded: Boolean = true,
+    val templateExerciseId: Long? = null,
+    val note: String? = null
 )
 
 /**
@@ -80,6 +88,7 @@ data class ActiveSet(
     val isCompleted: Boolean = false,
     val previousWeight: Int? = null,
     val previousReps: Int? = null,
+    val previousRpe: Float? = null,
     val restSeconds: Int? = null,
     val setType: com.workout.app.data.entities.SetType = com.workout.app.data.entities.SetType.REGULAR
 )
@@ -114,6 +123,7 @@ fun ActiveWorkoutScreen(
     exercises: List<ActiveExercise> = emptyList(),
     timerState: TimerState = TimerState(),
     timerStartsExpanded: Boolean = true,
+    snackbarEvent: SharedFlow<SnackbarEvent>? = null,
     onSetWeightChange: (exerciseIndex: Int, setNumber: Int, weight: Int?) -> Unit = { _, _, _ -> },
     onSetRepsChange: (exerciseIndex: Int, setNumber: Int, reps: Int?) -> Unit = { _, _, _ -> },
     onSetRestChange: (exerciseIndex: Int, setNumber: Int, restSeconds: Int?) -> Unit = { _, _, _ -> },
@@ -122,10 +132,12 @@ fun ActiveWorkoutScreen(
     onSetComplete: (exerciseIndex: Int, setNumber: Int) -> Unit = { _, _ -> },
     onAddSet: (exerciseIndex: Int) -> Unit = {},
     onRemoveSet: (exerciseIndex: Int, setId: Long) -> Unit = { _, _ -> },
+    onUndoSetRemove: () -> Unit = {},
     onAddExercise: () -> Unit = {},
     onRemoveExercise: (exerciseIndex: Int) -> Unit = {},
     onMoveExercise: (fromIndex: Int, toIndex: Int) -> Unit = { _, _ -> },
     onToggleExpand: (exerciseIndex: Int) -> Unit = {},
+    onExerciseNoteChange: (exerciseIndex: Int, note: String?) -> Unit = { _, _ -> },
     onTimerPause: () -> Unit = {},
     onTimerResume: () -> Unit = {},
     onTimerSkip: () -> Unit = {},
@@ -137,6 +149,28 @@ fun ActiveWorkoutScreen(
 ) {
     var showCancelDialog by remember { mutableStateOf(false) }
     var showFinishDialog by remember { mutableStateOf(false) }
+    val snackbarHostState = remember { SnackbarHostState() }
+    
+    // Handle snackbar events
+    LaunchedEffect(snackbarEvent) {
+        snackbarEvent?.collect { event ->
+            when (event) {
+                is SnackbarEvent.ShowUndo -> {
+                    val result = snackbarHostState.showSnackbar(
+                        message = event.message,
+                        actionLabel = "Undo",
+                        duration = SnackbarDuration.Short
+                    )
+                    if (result == SnackbarResult.ActionPerformed) {
+                        onUndoSetRemove()
+                    }
+                }
+                is SnackbarEvent.Dismiss -> {
+                    snackbarHostState.currentSnackbarData?.dismiss()
+                }
+            }
+        }
+    }
     
     // Workout duration timer - updates every second
     var elapsedSeconds by remember { mutableLongStateOf(0L) }
@@ -254,6 +288,17 @@ fun ActiveWorkoutScreen(
                 )
             }
         },
+        snackbarHost = {
+            SnackbarHost(hostState = snackbarHostState) { data ->
+                Snackbar(
+                    snackbarData = data,
+                    containerColor = MaterialTheme.colorScheme.inverseSurface,
+                    contentColor = MaterialTheme.colorScheme.inverseOnSurface,
+                    actionColor = MaterialTheme.colorScheme.primary,
+                    shape = RoundedCornerShape(12.dp)
+                )
+            }
+        },
         containerColor = MaterialTheme.colorScheme.background
     ) { innerPadding ->
         Column(
@@ -315,6 +360,7 @@ fun ActiveWorkoutScreen(
                                     isCompleted = set.isCompleted,
                                     previousWeight = set.previousWeight,
                                     previousReps = set.previousReps,
+                                    previousRpe = set.previousRpe,
                                     restSeconds = set.restSeconds,
                                     setType = set.setType
                                 )
@@ -324,6 +370,7 @@ fun ActiveWorkoutScreen(
                             isLast = index == exercises.lastIndex,
                             showRemoveSetButton = true,
                             showRpe = exercise.showRpe,
+                            note = exercise.note,
                             onExpandToggle = { onToggleExpand(index) },
                             onSetWeightChange = { setNumber, weight ->
                                 onSetWeightChange(index, setNumber, weight)
@@ -348,6 +395,7 @@ fun ActiveWorkoutScreen(
                             },
                             onAddSet = { onAddSet(index) },
                             onExerciseNameClick = { onExerciseNameClick(exercise.exerciseName) },
+                            onNoteChange = { note -> onExerciseNoteChange(index, note) },
                             onRemoveExercise = { onRemoveExercise(index) },
                             onMoveUp = {
                                 if (index > 0) onMoveExercise(index, index - 1)

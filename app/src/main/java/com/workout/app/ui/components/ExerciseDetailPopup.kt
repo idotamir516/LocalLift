@@ -1,6 +1,10 @@
 package com.workout.app.ui.components
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,6 +21,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.outlined.FitnessCenter
 import androidx.compose.material3.BasicAlertDialog
 import androidx.compose.material3.Card
@@ -45,7 +51,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.workout.app.data.Exercise
 import com.workout.app.data.ExerciseLibrary
+import com.workout.app.data.entities.PhaseType
 import com.workout.app.data.entities.SetType
+import com.workout.app.data.entities.TrainingPhase
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -89,6 +97,7 @@ fun ExerciseDetailPopup(
     recentSessions: List<SessionLiftData> = emptyList(),
     estimatedOneRepMax: Float? = null,
     oneRepMaxHistory: List<OneRepMaxEntry> = emptyList(),
+    trainingPhases: List<TrainingPhase> = emptyList(),
     onDismiss: () -> Unit
 ) {
     // Find exercise details from library
@@ -188,7 +197,8 @@ fun ExerciseDetailPopup(
                     // 1RM Section
                     OneRepMaxSection(
                         estimatedOneRepMax = estimatedOneRepMax,
-                        oneRepMaxHistory = oneRepMaxHistory
+                        oneRepMaxHistory = oneRepMaxHistory,
+                        trainingPhases = trainingPhases
                     )
                     
                     Spacer(modifier = Modifier.height(20.dp))
@@ -280,8 +290,11 @@ private fun MuscleTargetsSection(exercise: Exercise) {
 @Composable
 private fun OneRepMaxSection(
     estimatedOneRepMax: Float?,
-    oneRepMaxHistory: List<OneRepMaxEntry>
+    oneRepMaxHistory: List<OneRepMaxEntry>,
+    trainingPhases: List<TrainingPhase> = emptyList()
 ) {
+    var isPercentageTableExpanded by remember { mutableStateOf(false) }
+    
     Column(modifier = Modifier.fillMaxWidth()) {
         Text(
             text = "Estimated 1 Rep Max",
@@ -325,18 +338,45 @@ private fun OneRepMaxSection(
             
             Spacer(modifier = Modifier.height(16.dp))
             
-            // Percentage table
-            Text(
-                text = "Percentages of 1RM",
-                style = MaterialTheme.typography.labelMedium.copy(
-                    fontWeight = FontWeight.Medium
-                ),
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            // Collapsible percentage table header
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable { isPercentageTableExpanded = !isPercentageTableExpanded }
+                    .padding(vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = "Percentages of 1RM",
+                    style = MaterialTheme.typography.labelMedium.copy(
+                        fontWeight = FontWeight.Medium
+                    ),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Icon(
+                    imageVector = if (isPercentageTableExpanded) 
+                        Icons.Default.KeyboardArrowUp 
+                    else 
+                        Icons.Default.KeyboardArrowDown,
+                    contentDescription = if (isPercentageTableExpanded) "Collapse" else "Expand",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
             
-            Spacer(modifier = Modifier.height(8.dp))
-            
-            PercentageTable(oneRepMax = estimatedOneRepMax)
+            // Animated percentage table
+            AnimatedVisibility(
+                visible = isPercentageTableExpanded,
+                enter = expandVertically(),
+                exit = shrinkVertically()
+            ) {
+                Column {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    PercentageTable(oneRepMax = estimatedOneRepMax)
+                }
+            }
             
             // 1RM History Graph (if we have history)
             if (oneRepMaxHistory.size >= 2) {
@@ -352,7 +392,10 @@ private fun OneRepMaxSection(
                 
                 Spacer(modifier = Modifier.height(8.dp))
                 
-                OneRepMaxGraph(history = oneRepMaxHistory)
+                OneRepMaxGraph(
+                    history = oneRepMaxHistory,
+                    phases = trainingPhases
+                )
             }
         } else {
             // No data available
@@ -481,86 +524,195 @@ private fun getEstimatedRepsForPercentage(percentage: Int): String {
 }
 
 /**
- * Simple line graph showing 1RM over time.
+ * Simple line graph showing 1RM over time with training phase background bands.
  */
 @Composable
-private fun OneRepMaxGraph(history: List<OneRepMaxEntry>) {
+private fun OneRepMaxGraph(
+    history: List<OneRepMaxEntry>,
+    phases: List<TrainingPhase> = emptyList()
+) {
     val sortedHistory = history.sortedBy { it.date }
     val maxValue = sortedHistory.maxOfOrNull { it.estimatedMax } ?: 0f
     val minValue = sortedHistory.minOfOrNull { it.estimatedMax } ?: 0f
-    val range = (maxValue - minValue).coerceAtLeast(10f)
+    val range = (maxValue - minValue).coerceAtLeast(0.1f) // Small minimum to avoid division by zero
+    
+    // Debug logging
+    android.util.Log.d("OneRepMaxGraph", "History size: ${sortedHistory.size}")
+    android.util.Log.d("OneRepMaxGraph", "Values: ${sortedHistory.map { it.estimatedMax }}")
+    android.util.Log.d("OneRepMaxGraph", "maxValue: $maxValue, minValue: $minValue, range: $range")
+    
+    // Get date range from history
+    val minDate = sortedHistory.firstOrNull()?.date ?: 0L
+    val maxDate = sortedHistory.lastOrNull()?.date ?: 0L
+    val dateRange = (maxDate - minDate).coerceAtLeast(1L)
+    
+    // Filter phases that overlap with the graph's date range
+    val relevantPhases = phases.filter { phase ->
+        val phaseEnd = phase.endDate ?: System.currentTimeMillis()
+        phase.startDate <= maxDate && phaseEnd >= minDate
+    }
+    
+    // Color mapping for phase types
+    fun getPhaseColor(phaseType: PhaseType): Color {
+        return when (phaseType) {
+            PhaseType.BULK -> Color(0xFF4CAF50).copy(alpha = 0.15f) // Green tint
+            PhaseType.CUT -> Color(0xFFF44336).copy(alpha = 0.15f) // Red tint
+            PhaseType.MAINTENANCE -> Color(0xFF9E9E9E).copy(alpha = 0.15f) // Gray tint
+            PhaseType.STRENGTH -> Color(0xFF2196F3).copy(alpha = 0.15f) // Blue tint
+            PhaseType.HYPERTROPHY -> Color(0xFF9C27B0).copy(alpha = 0.15f) // Purple tint
+            PhaseType.DELOAD -> Color(0xFFFF9800).copy(alpha = 0.15f) // Orange tint
+            PhaseType.CUSTOM -> Color(0xFF607D8B).copy(alpha = 0.15f) // Blue-gray tint
+        }
+    }
+    
+    // Label color for phase types (slightly darker for readability)
+    fun getPhaseLabelColor(phaseType: PhaseType): Color {
+        return when (phaseType) {
+            PhaseType.BULK -> Color(0xFF388E3C)
+            PhaseType.CUT -> Color(0xFFD32F2F)
+            PhaseType.MAINTENANCE -> Color(0xFF757575)
+            PhaseType.STRENGTH -> Color(0xFF1976D2)
+            PhaseType.HYPERTROPHY -> Color(0xFF7B1FA2)
+            PhaseType.DELOAD -> Color(0xFFF57C00)
+            PhaseType.CUSTOM -> Color(0xFF455A64)
+        }
+    }
     
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .height(120.dp),
+            .height(if (relevantPhases.isNotEmpty()) 140.dp else 120.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
         ),
         shape = RoundedCornerShape(8.dp)
     ) {
-        Box(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(12.dp)
         ) {
-            androidx.compose.foundation.Canvas(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(80.dp)
-            ) {
-                val width = size.width
-                val height = size.height
-                val pointSpacing = if (sortedHistory.size > 1) width / (sortedHistory.size - 1) else width
-                
-                // Draw line connecting points
-                val path = androidx.compose.ui.graphics.Path()
-                sortedHistory.forEachIndexed { index, entry ->
-                    val x = index * pointSpacing
-                    val normalizedY = (entry.estimatedMax - minValue) / range
-                    val y = height - (normalizedY * height * 0.8f) - (height * 0.1f)
-                    
-                    if (index == 0) {
-                        path.moveTo(x, y)
-                    } else {
-                        path.lineTo(x, y)
+            // Phase labels row (if we have phases)
+            if (relevantPhases.isNotEmpty()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 32.dp) // Account for Y-axis width
+                        .height(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    relevantPhases.forEach { phase ->
+                        val phaseEnd = phase.endDate ?: System.currentTimeMillis()
+                        // Calculate the portion of the graph this phase covers
+                        val startX = ((phase.startDate.coerceAtLeast(minDate) - minDate).toFloat() / dateRange).coerceIn(0f, 1f)
+                        val endX = ((phaseEnd.coerceAtMost(maxDate) - minDate).toFloat() / dateRange).coerceIn(0f, 1f)
+                        val width = (endX - startX).coerceAtLeast(0f)
+                        
+                        if (width > 0.05f) { // Only show label if phase covers >5% of graph
+                            Spacer(modifier = Modifier.weight(startX.coerceAtLeast(0.001f)))
+                            Text(
+                                text = phase.name.take(10) + if (phase.name.length > 10) "…" else "",
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontWeight = FontWeight.Medium
+                                ),
+                                color = getPhaseLabelColor(phase.type),
+                                modifier = Modifier.weight(width.coerceAtLeast(0.001f)),
+                                maxLines = 1
+                            )
+                            Spacer(modifier = Modifier.weight((1f - endX).coerceAtLeast(0.001f)))
+                        }
                     }
                 }
-                
-                drawPath(
-                    path = path,
-                    color = Color(0xFF4CAF50),
-                    style = androidx.compose.ui.graphics.drawscope.Stroke(
-                        width = 3.dp.toPx(),
-                        cap = androidx.compose.ui.graphics.StrokeCap.Round
-                    )
-                )
-                
-                // Draw points
-                sortedHistory.forEachIndexed { index, entry ->
-                    val x = index * pointSpacing
-                    val normalizedY = (entry.estimatedMax - minValue) / range
-                    val y = height - (normalizedY * height * 0.8f) - (height * 0.1f)
-                    
-                    drawCircle(
-                        color = Color(0xFF4CAF50),
-                        radius = 5.dp.toPx(),
-                        center = androidx.compose.ui.geometry.Offset(x, y)
-                    )
-                }
+                Spacer(modifier = Modifier.height(4.dp))
             }
             
-            // Show latest value
-            Column(
-                modifier = Modifier.align(Alignment.TopEnd)
+            // Graph with Y-axis
+            Row(
+                modifier = Modifier.fillMaxWidth()
             ) {
-                val latest = sortedHistory.lastOrNull()
-                if (latest != null) {
+                // Y-axis labels (with padding to match graph's 10% top/bottom padding)
+                Column(
+                    modifier = Modifier
+                        .width(30.dp)
+                        .height(80.dp)
+                        .padding(vertical = 8.dp), // ~10% of 80dp to match graph padding
+                    verticalArrangement = Arrangement.SpaceBetween
+                ) {
                     Text(
-                        text = "${latest.estimatedMax.toInt()} lbs",
-                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                        color = Color(0xFF4CAF50)
+                        text = "${maxValue.toInt()}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                     )
+                    Text(
+                        text = "${minValue.toInt()}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                    )
+                }
+                
+                Spacer(modifier = Modifier.width(4.dp))
+                
+                // Graph canvas
+                androidx.compose.foundation.Canvas(
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(80.dp)
+                ) {
+                    val width = size.width
+                    val height = size.height
+                    val pointSpacing = if (sortedHistory.size > 1) width / (sortedHistory.size - 1) else width
+                    
+                    // Draw phase background bands first
+                    relevantPhases.forEach { phase ->
+                        val phaseEnd = phase.endDate ?: System.currentTimeMillis()
+                        // Calculate x positions for the band
+                        val startX = ((phase.startDate.coerceAtLeast(minDate) - minDate).toFloat() / dateRange) * width
+                        val endX = ((phaseEnd.coerceAtMost(maxDate) - minDate).toFloat() / dateRange) * width
+                        
+                        if (endX > startX) {
+                            drawRect(
+                                color = getPhaseColor(phase.type),
+                                topLeft = androidx.compose.ui.geometry.Offset(startX, 0f),
+                                size = androidx.compose.ui.geometry.Size(endX - startX, height)
+                            )
+                        }
+                    }
+                    
+                    // Draw line connecting points
+                    val path = androidx.compose.ui.graphics.Path()
+                    sortedHistory.forEachIndexed { index, entry ->
+                        val x = index * pointSpacing
+                        val normalizedY = (entry.estimatedMax - minValue) / range
+                        val y = height - (normalizedY * height * 0.8f) - (height * 0.1f)
+                        
+                        if (index == 0) {
+                            path.moveTo(x, y)
+                        } else {
+                            path.lineTo(x, y)
+                        }
+                    }
+                    
+                    drawPath(
+                        path = path,
+                        color = Color(0xFF4CAF50),
+                        style = androidx.compose.ui.graphics.drawscope.Stroke(
+                            width = 3.dp.toPx(),
+                            cap = androidx.compose.ui.graphics.StrokeCap.Round
+                        )
+                    )
+                    
+                    // Draw points
+                    sortedHistory.forEachIndexed { index, entry ->
+                        val x = index * pointSpacing
+                        val normalizedY = (entry.estimatedMax - minValue) / range
+                        val y = height - (normalizedY * height * 0.8f) - (height * 0.1f)
+                        
+                        drawCircle(
+                            color = Color(0xFF4CAF50),
+                            radius = 5.dp.toPx(),
+                            center = androidx.compose.ui.geometry.Offset(x, y)
+                        )
+                    }
                 }
             }
         }

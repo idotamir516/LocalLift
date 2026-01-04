@@ -8,12 +8,14 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.List
-import androidx.compose.material.icons.automirrored.outlined.List
+import androidx.compose.material.icons.automirrored.filled.TrendingUp
+import androidx.compose.material.icons.automirrored.outlined.TrendingUp
 import androidx.compose.material.icons.filled.FitnessCenter
-import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.outlined.FitnessCenter
-import androidx.compose.material.icons.outlined.History
+import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -57,20 +59,24 @@ import com.workout.app.ui.components.OneRepMaxEntry
 import com.workout.app.ui.components.findBestOneRepMax
 import com.workout.app.ui.screens.ActiveWorkoutScreen
 import com.workout.app.ui.screens.ActiveWorkoutState
+import com.workout.app.ui.screens.BodyScreen
 import com.workout.app.ui.screens.EditWorkoutScreen
 import com.workout.app.ui.screens.EditableExerciseLog
 import com.workout.app.ui.screens.EditableSetLog
 import com.workout.app.ui.screens.EditableExercise
 import com.workout.app.ui.screens.EditableTemplateSet
-import com.workout.app.ui.screens.HistoryScreen
+import com.workout.app.ui.screens.HomeScreen
+import com.workout.app.ui.screens.HomeStats
 import com.workout.app.ui.screens.ProgramAnalyzerScreen
+import com.workout.app.ui.screens.ProgressScreen
 import com.workout.app.ui.screens.SettingsScreen
-import com.workout.app.ui.screens.StartWorkoutScreen
 import com.workout.app.ui.screens.TemplateEditorScreen
-import com.workout.app.ui.screens.TemplatesScreen
 import com.workout.app.ui.screens.TrainingPhasesScreen
+import com.workout.app.ui.screens.WeightScreen
 import com.workout.app.ui.screens.WorkoutDetailScreen
+import com.workout.app.ui.screens.WorkoutScreen
 import com.workout.app.util.SettingsManager
+import com.workout.app.util.HomeStatType
 import com.workout.app.util.WorkoutExporter
 import kotlinx.coroutines.launch
 
@@ -79,9 +85,10 @@ import kotlinx.coroutines.launch
  */
 sealed class Screen(val route: String) {
     // Bottom nav tabs
+    object Home : Screen("home")
     object StartWorkout : Screen("start_workout")
-    object Templates : Screen("templates")
-    object History : Screen("history")
+    object Progress : Screen("progress")
+    object Body : Screen("body")
     
     // Detail screens
     object ActiveWorkout : Screen("active_workout/{sessionId}") {
@@ -99,6 +106,7 @@ sealed class Screen(val route: String) {
     object ProgramAnalyzer : Screen("program_analyzer")
     object Settings : Screen("settings")
     object TrainingPhases : Screen("training_phases")
+    object Weight : Screen("weight")
 }
 
 /**
@@ -113,22 +121,28 @@ data class BottomNavItem(
 
 val bottomNavItems = listOf(
     BottomNavItem(
+        screen = Screen.Home,
+        label = "Home",
+        selectedIcon = Icons.Filled.Home,
+        unselectedIcon = Icons.Outlined.Home
+    ),
+    BottomNavItem(
         screen = Screen.StartWorkout,
         label = "Workout",
         selectedIcon = Icons.Filled.FitnessCenter,
         unselectedIcon = Icons.Outlined.FitnessCenter
     ),
     BottomNavItem(
-        screen = Screen.Templates,
-        label = "Templates",
-        selectedIcon = Icons.AutoMirrored.Filled.List,
-        unselectedIcon = Icons.AutoMirrored.Outlined.List
+        screen = Screen.Progress,
+        label = "Progress",
+        selectedIcon = Icons.AutoMirrored.Filled.TrendingUp,
+        unselectedIcon = Icons.AutoMirrored.Outlined.TrendingUp
     ),
     BottomNavItem(
-        screen = Screen.History,
-        label = "History",
-        selectedIcon = Icons.Filled.History,
-        unselectedIcon = Icons.Outlined.History
+        screen = Screen.Body,
+        label = "Body",
+        selectedIcon = Icons.Filled.Person,
+        unselectedIcon = Icons.Outlined.Person
     )
 )
 
@@ -158,14 +172,121 @@ fun AppNavigation() {
     ) { innerPadding ->
         NavHost(
             navController = navController,
-            startDestination = Screen.StartWorkout.route,
+            startDestination = Screen.Home.route,
             modifier = Modifier.padding(innerPadding)
         ) {
-            // Start Workout screen
+            // Home screen (new dashboard)
+            composable(Screen.Home.route) {
+                val settingsManager = remember { SettingsManager.getInstance(context) }
+                val today = System.currentTimeMillis()
+                val activePhase by database.phaseDao().getActivePhaseForDate(today).collectAsState(initial = null)
+                val recentWorkout by database.sessionDao().getMostRecentSession().collectAsState(initial = null)
+                val totalWorkouts by database.sessionDao().getTotalWorkoutCount().collectAsState(initial = 0)
+                
+                // Calculate week start (Monday at midnight)
+                val calendar = java.util.Calendar.getInstance()
+                calendar.set(java.util.Calendar.DAY_OF_WEEK, java.util.Calendar.MONDAY)
+                calendar.set(java.util.Calendar.HOUR_OF_DAY, 0)
+                calendar.set(java.util.Calendar.MINUTE, 0)
+                calendar.set(java.util.Calendar.SECOND, 0)
+                calendar.set(java.util.Calendar.MILLISECOND, 0)
+                val weekStartMillis = calendar.timeInMillis
+                
+                // Calculate month start
+                val monthCalendar = java.util.Calendar.getInstance()
+                monthCalendar.set(java.util.Calendar.DAY_OF_MONTH, 1)
+                monthCalendar.set(java.util.Calendar.HOUR_OF_DAY, 0)
+                monthCalendar.set(java.util.Calendar.MINUTE, 0)
+                monthCalendar.set(java.util.Calendar.SECOND, 0)
+                monthCalendar.set(java.util.Calendar.MILLISECOND, 0)
+                val monthStartMillis = monthCalendar.timeInMillis
+                
+                // Calculate year start
+                val yearCalendar = java.util.Calendar.getInstance()
+                yearCalendar.set(java.util.Calendar.DAY_OF_YEAR, 1)
+                yearCalendar.set(java.util.Calendar.HOUR_OF_DAY, 0)
+                yearCalendar.set(java.util.Calendar.MINUTE, 0)
+                yearCalendar.set(java.util.Calendar.SECOND, 0)
+                yearCalendar.set(java.util.Calendar.MILLISECOND, 0)
+                val yearStartMillis = yearCalendar.timeInMillis
+                
+                val workoutsThisWeek by database.sessionDao().getWorkoutsThisWeek(weekStartMillis).collectAsState(initial = 0)
+                val workoutsThisMonth by database.sessionDao().getWorkoutsThisMonth(monthStartMillis).collectAsState(initial = 0)
+                val workoutsThisYear by database.sessionDao().getWorkoutsThisYear(yearStartMillis).collectAsState(initial = 0)
+                
+                // Calculate last week start for volume comparison
+                val lastWeekCalendar = java.util.Calendar.getInstance()
+                lastWeekCalendar.timeInMillis = weekStartMillis
+                lastWeekCalendar.add(java.util.Calendar.WEEK_OF_YEAR, -1)
+                val lastWeekStartMillis = lastWeekCalendar.timeInMillis
+                
+                // Volume stats
+                val volumeThisWeek by database.sessionDao().getVolumeThisWeek(weekStartMillis).collectAsState(initial = 0f)
+                val volumeLastWeek by database.sessionDao().getVolumeLastWeek(lastWeekStartMillis, weekStartMillis).collectAsState(initial = 0f)
+                val volumeThisMonth by database.sessionDao().getVolumeThisMonth(monthStartMillis).collectAsState(initial = 0f)
+                
+                // Calculate streak from distinct workout dates
+                val distinctDates by database.sessionDao().getDistinctWorkoutDates().collectAsState(initial = emptyList())
+                val currentStreak = remember(distinctDates) {
+                    calculateCurrentStreakFromStrings(distinctDates)
+                }
+                
+                // Calculate weekly average
+                val firstWorkoutDate by database.sessionDao().getFirstWorkoutDate().collectAsState(initial = null)
+                val weeklyAverage = remember(totalWorkouts, firstWorkoutDate) {
+                    calculateWeeklyAverage(totalWorkouts, firstWorkoutDate).toFloat()
+                }
+                
+                // Stat type preferences
+                val leftStatType by settingsManager.homeStatLeft.collectAsState()
+                val rightStatType by settingsManager.homeStatRight.collectAsState()
+                
+                val stats = HomeStats(
+                    workoutsThisWeek = workoutsThisWeek,
+                    currentStreak = currentStreak,
+                    weeklyAverage = weeklyAverage,
+                    totalWorkouts = totalWorkouts,
+                    workoutsThisMonth = workoutsThisMonth,
+                    workoutsThisYear = workoutsThisYear,
+                    volumeThisWeek = volumeThisWeek,
+                    volumeLastWeek = volumeLastWeek,
+                    volumeThisMonth = volumeThisMonth
+                )
+                
+                HomeScreen(
+                    activePhase = activePhase,
+                    recentWorkout = recentWorkout,
+                    stats = stats,
+                    leftStatType = leftStatType,
+                    rightStatType = rightStatType,
+                    onSettingsClick = {
+                        navController.navigate(Screen.Settings.route)
+                    },
+                    onPhaseClick = {
+                        navController.navigate(Screen.TrainingPhases.route)
+                    },
+                    onRecentWorkoutClick = { sessionId ->
+                        navController.navigate(Screen.WorkoutDetail.createRoute(sessionId))
+                    },
+                    onStartWorkoutClick = {
+                        navController.navigate(Screen.StartWorkout.route)
+                    },
+                    onLeftStatClick = {
+                        val nextStat = cycleLeftStat(leftStatType)
+                        settingsManager.setHomeStatLeft(nextStat)
+                    },
+                    onRightStatClick = {
+                        val nextStat = cycleRightStat(rightStatType)
+                        settingsManager.setHomeStatRight(nextStat)
+                    }
+                )
+            }
+            
+            // Workout screen (merged with templates)
             composable(Screen.StartWorkout.route) {
                 val folders = database.folderDao().getAllFolders()
                 
-                StartWorkoutScreen(
+                WorkoutScreen(
                     templates = templates,
                     folders = folders,
                     activeSession = activeSession,
@@ -244,19 +365,6 @@ fun AppNavigation() {
                     },
                     onCreateTemplate = {
                         navController.navigate(Screen.TemplateEditor.createRoute(null))
-                    }
-                )
-            }
-            
-            // Templates screen
-            composable(Screen.Templates.route) {
-                val folders = database.folderDao().getAllFolders()
-                
-                TemplatesScreen(
-                    templates = templates,
-                    folders = folders,
-                    onCreateTemplate = {
-                        navController.navigate(Screen.TemplateEditor.createRoute(null))
                     },
                     onEditTemplate = { templateId ->
                         navController.navigate(Screen.TemplateEditor.createRoute(templateId))
@@ -266,6 +374,40 @@ fun AppNavigation() {
                             val template = database.templateDao().getTemplateWithExercisesSync(templateId)
                             if (template != null) {
                                 database.templateDao().deleteTemplate(template.template)
+                            }
+                        }
+                    },
+                    onDuplicateTemplate = { templateId ->
+                        scope.launch {
+                            val fullTemplate = database.templateDao().getFullTemplateWithExercisesAndSets(templateId)
+                            if (fullTemplate != null) {
+                                // Create new template with "(Copy)" suffix
+                                val newTemplateId = database.templateDao().insertTemplate(
+                                    fullTemplate.template.copy(
+                                        id = 0,
+                                        name = "${fullTemplate.template.name} (Copy)"
+                                    )
+                                )
+                                
+                                // Copy all exercises with their sets
+                                fullTemplate.exercises.forEach { exerciseWithSets ->
+                                    val newExerciseId = database.templateDao().insertExercise(
+                                        exerciseWithSets.exercise.copy(
+                                            id = 0,
+                                            templateId = newTemplateId
+                                        )
+                                    )
+                                    
+                                    // Copy sets
+                                    exerciseWithSets.sets.forEach { set ->
+                                        database.templateDao().insertTemplateSet(
+                                            set.copy(
+                                                id = 0,
+                                                templateExerciseId = newExerciseId
+                                            )
+                                        )
+                                    }
+                                }
                             }
                         }
                     },
@@ -298,9 +440,6 @@ fun AppNavigation() {
                             database.templateDao().moveTemplateToFolder(templateId, folderId)
                         }
                     },
-                    onOpenSettings = {
-                        navController.navigate(Screen.Settings.route)
-                    },
                     onOpenAnalyzer = {
                         navController.navigate(Screen.ProgramAnalyzer.route)
                     }
@@ -313,9 +452,6 @@ fun AppNavigation() {
                     settingsManager = settingsManager,
                     onNavigateBack = {
                         navController.popBackStack()
-                    },
-                    onNavigateToTrainingPhases = {
-                        navController.navigate(Screen.TrainingPhases.route)
                     }
                 )
             }
@@ -380,8 +516,11 @@ fun AppNavigation() {
                 )
             }
             
-            // History screen
-            composable(Screen.History.route) {
+            // Progress screen (new tab)
+            composable(Screen.Progress.route) {
+                // Get workout dates for calendar
+                val workoutDates = remember { database.sessionDao().getWorkoutDates() }
+                
                 // State to hold CSV content for saving to file
                 var pendingCsvContent by remember { mutableStateOf<String?>(null) }
                 
@@ -404,8 +543,9 @@ fun AppNavigation() {
                     pendingCsvContent = null
                 }
                 
-                HistoryScreen(
+                ProgressScreen(
                     completedSessions = completedSessions,
+                    workoutDates = workoutDates,
                     onWorkoutClick = { sessionId ->
                         navController.navigate(Screen.WorkoutDetail.createRoute(sessionId))
                     },
@@ -425,6 +565,50 @@ fun AppNavigation() {
                             pendingCsvContent = csvContent
                             val fileName = WorkoutExporter.generateFileName()
                             createDocumentLauncher.launch(fileName)
+                        }
+                    }
+                )
+            }
+            
+            // Body screen (new tab)
+            composable(Screen.Body.route) {
+                BodyScreen(
+                    onTrainingPhasesClick = {
+                        navController.navigate(Screen.TrainingPhases.route)
+                    },
+                    onWeightClick = {
+                        navController.navigate(Screen.Weight.route)
+                    }
+                )
+            }
+            
+            // Weight tracking screen
+            composable(Screen.Weight.route) {
+                val weightEntries = remember { database.weightDao().getAllWeightEntries() }
+                
+                WeightScreen(
+                    weightEntries = weightEntries,
+                    onNavigateBack = { navController.popBackStack() },
+                    onAddWeight = { weight, unit, date, notes ->
+                        scope.launch {
+                            database.weightDao().insertWeightEntry(
+                                com.workout.app.data.entities.WeightEntry(
+                                    weight = weight,
+                                    unit = unit,
+                                    date = date,
+                                    notes = notes
+                                )
+                            )
+                        }
+                    },
+                    onUpdateWeight = { entry ->
+                        scope.launch {
+                            database.weightDao().updateWeightEntry(entry)
+                        }
+                    },
+                    onDeleteWeight = { entry ->
+                        scope.launch {
+                            database.weightDao().deleteWeightEntry(entry)
                         }
                     }
                 )
@@ -474,6 +658,7 @@ fun AppNavigation() {
                     exercises = exercises,
                     timerState = timerState,
                     timerStartsExpanded = !timerStartsMinimized,
+                    snackbarEvent = workoutState.snackbarEvent,
                     onSetWeightChange = { exerciseIndex, setNumber, weight ->
                         workoutState.updateSetWeight(exerciseIndex, setNumber, weight)
                     },
@@ -498,6 +683,9 @@ fun AppNavigation() {
                     onRemoveSet = { exerciseIndex, setId ->
                         workoutState.removeSetById(exerciseIndex, setId)
                     },
+                    onUndoSetRemove = {
+                        workoutState.undoSetDeletion()
+                    },
                     onAddExercise = {
                         workoutState.showExercisePicker()
                     },
@@ -510,6 +698,9 @@ fun AppNavigation() {
                     onToggleExpand = { exerciseIndex ->
                         workoutState.toggleExpand(exerciseIndex)
                     },
+                    onExerciseNoteChange = { exerciseIndex, note ->
+                        workoutState.updateExerciseNote(exerciseIndex, note)
+                    },
                     onTimerPause = { workoutState.pauseTimer() },
                     onTimerResume = { workoutState.resumeTimer() },
                     onTimerSkip = { workoutState.skipTimer() },
@@ -518,9 +709,9 @@ fun AppNavigation() {
                     onFinishWorkout = {
                         scope.launch {
                             workoutState.finishWorkout()
-                            // Clear entire backstack and go to History
+                            // Clear entire backstack and go to Progress
                             // This ensures no stale ActiveWorkout state remains
-                            navController.navigate(Screen.History.route) {
+                            navController.navigate(Screen.Progress.route) {
                                 popUpTo(0) { inclusive = true }
                             }
                         }
@@ -543,6 +734,7 @@ fun AppNavigation() {
                     var recentSessions by remember { mutableStateOf<List<SessionLiftData>>(emptyList()) }
                     var estimatedOneRepMax by remember { mutableStateOf<Float?>(null) }
                     var oneRepMaxHistory by remember { mutableStateOf<List<OneRepMaxEntry>>(emptyList()) }
+                    var trainingPhases by remember { mutableStateOf<List<com.workout.app.data.entities.TrainingPhase>>(emptyList()) }
                     
                     LaunchedEffect(selectedExerciseForDetails) {
                         isLoadingDetails = true
@@ -577,6 +769,13 @@ fun AppNavigation() {
                             // Current estimated 1RM is the most recent
                             estimatedOneRepMax = oneRepMaxHistory.lastOrNull()?.estimatedMax
                             
+                            // Load training phases that overlap with the 1RM history date range
+                            if (oneRepMaxHistory.size >= 2) {
+                                val minDate = oneRepMaxHistory.first().date
+                                val maxDate = oneRepMaxHistory.last().date
+                                trainingPhases = database.phaseDao().getPhasesInDateRange(minDate, maxDate)
+                            }
+                            
                         } catch (e: Exception) {
                             // Handle error silently
                         }
@@ -589,6 +788,7 @@ fun AppNavigation() {
                         recentSessions = recentSessions,
                         estimatedOneRepMax = estimatedOneRepMax,
                         oneRepMaxHistory = oneRepMaxHistory,
+                        trainingPhases = trainingPhases,
                         onDismiss = {
                             showExerciseDetailPopup = false
                             selectedExerciseForDetails = null
@@ -649,6 +849,7 @@ fun AppNavigation() {
                                     restSeconds = exerciseWithSets.exercise.restSeconds,
                                     orderIndex = index,
                                     showRpe = exerciseWithSets.exercise.showRpe,
+                                    note = exerciseWithSets.exercise.note,
                                     sets = if (exerciseWithSets.sets.isNotEmpty()) {
                                         exerciseWithSets.sets.sortedBy { it.setNumber }.map { set ->
                                             EditableTemplateSet(
@@ -706,7 +907,8 @@ fun AppNavigation() {
                                                 targetSets = exercise.sets.size,
                                                 restSeconds = exercise.sets.firstOrNull()?.restSeconds,
                                                 orderIndex = index,
-                                                showRpe = exercise.showRpe
+                                                showRpe = exercise.showRpe,
+                                                note = exercise.note
                                             )
                                         )
                                         // Insert sets for this exercise
@@ -735,7 +937,8 @@ fun AppNavigation() {
                                                 targetSets = exercise.sets.size,
                                                 restSeconds = exercise.sets.firstOrNull()?.restSeconds,
                                                 orderIndex = index,
-                                                showRpe = exercise.showRpe
+                                                showRpe = exercise.showRpe,
+                                                note = exercise.note
                                             )
                                         )
                                         // Insert sets for this exercise
@@ -779,6 +982,7 @@ fun AppNavigation() {
                         var recentSessions by remember { mutableStateOf<List<SessionLiftData>>(emptyList()) }
                         var estimatedOneRepMax by remember { mutableStateOf<Float?>(null) }
                         var oneRepMaxHistory by remember { mutableStateOf<List<OneRepMaxEntry>>(emptyList()) }
+                        var trainingPhases by remember { mutableStateOf<List<com.workout.app.data.entities.TrainingPhase>>(emptyList()) }
                         
                         LaunchedEffect(selectedTemplateExerciseForDetails) {
                             isLoadingDetails = true
@@ -813,6 +1017,13 @@ fun AppNavigation() {
                                 // Current estimated 1RM is the most recent
                                 estimatedOneRepMax = oneRepMaxHistory.lastOrNull()?.estimatedMax
                                 
+                                // Load training phases that overlap with the 1RM history date range
+                                if (oneRepMaxHistory.size >= 2) {
+                                    val minDate = oneRepMaxHistory.first().date
+                                    val maxDate = oneRepMaxHistory.last().date
+                                    trainingPhases = database.phaseDao().getPhasesInDateRange(minDate, maxDate)
+                                }
+                                
                             } catch (e: Exception) {
                                 // Handle error silently
                             }
@@ -825,6 +1036,7 @@ fun AppNavigation() {
                             recentSessions = recentSessions,
                             estimatedOneRepMax = estimatedOneRepMax,
                             oneRepMaxHistory = oneRepMaxHistory,
+                            trainingPhases = trainingPhases,
                             onDismiss = {
                                 showTemplateExerciseDetailPopup = false
                                 selectedTemplateExerciseForDetails = null
@@ -1039,5 +1251,97 @@ fun BottomNavigationBar(navController: NavHostController) {
                 }
             )
         }
+    }
+}
+
+/**
+ * Calculate current workout streak from list of distinct workout date strings (format: yyyy-MM-dd).
+ * A streak counts consecutive days with workouts ending at today or yesterday.
+ */
+private fun calculateCurrentStreakFromStrings(distinctDates: List<String>): Int {
+    if (distinctDates.isEmpty()) return 0
+    
+    val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+    
+    val today = java.util.Calendar.getInstance().apply {
+        set(java.util.Calendar.HOUR_OF_DAY, 0)
+        set(java.util.Calendar.MINUTE, 0)
+        set(java.util.Calendar.SECOND, 0)
+        set(java.util.Calendar.MILLISECOND, 0)
+    }
+    
+    val todayMillis = today.timeInMillis
+    val oneDayMillis = 24 * 60 * 60 * 1000L
+    
+    // Parse dates and sort descending
+    val sortedDates = distinctDates
+        .mapNotNull { dateStr -> 
+            try { dateFormat.parse(dateStr)?.time } catch (e: Exception) { null }
+        }
+        .sortedDescending()
+    
+    if (sortedDates.isEmpty()) return 0
+    
+    // Check if most recent workout is today or yesterday
+    val mostRecentDate = sortedDates.first()
+    val daysSinceLast = (todayMillis - mostRecentDate) / oneDayMillis
+    if (daysSinceLast > 1) return 0 // Streak broken
+    
+    var streak = 1
+    var previousDate = mostRecentDate
+    
+    for (i in 1 until sortedDates.size) {
+        val currentDate = sortedDates[i]
+        val dayDiff = (previousDate - currentDate) / oneDayMillis
+        
+        if (dayDiff == 1L) {
+            streak++
+            previousDate = currentDate
+        } else if (dayDiff > 1L) {
+            break // Gap in dates, streak ends
+        }
+        // dayDiff == 0 means same day, continue checking
+    }
+    
+    return streak
+}
+
+/**
+ * Calculate average workouts per week since first workout.
+ */
+private fun calculateWeeklyAverage(totalWorkouts: Int, firstWorkoutDate: Long?): Double {
+    if (firstWorkoutDate == null || totalWorkouts == 0) return 0.0
+    
+    val now = System.currentTimeMillis()
+    val weeksElapsed = ((now - firstWorkoutDate) / (7.0 * 24 * 60 * 60 * 1000)).coerceAtLeast(1.0)
+    
+    return totalWorkouts / weeksElapsed
+}
+
+/**
+ * Cycle to the next left stat type.
+ */
+private fun cycleLeftStat(current: HomeStatType): HomeStatType {
+    return when (current) {
+        HomeStatType.THIS_WEEK -> HomeStatType.CURRENT_STREAK
+        HomeStatType.CURRENT_STREAK -> HomeStatType.WEEKLY_AVG
+        HomeStatType.WEEKLY_AVG -> HomeStatType.VOLUME_THIS_WEEK
+        HomeStatType.VOLUME_THIS_WEEK -> HomeStatType.THIS_WEEK
+        // If somehow a right stat is selected, reset to default
+        else -> HomeStatType.THIS_WEEK
+    }
+}
+
+/**
+ * Cycle to the next right stat type.
+ */
+private fun cycleRightStat(current: HomeStatType): HomeStatType {
+    return when (current) {
+        HomeStatType.TOTAL -> HomeStatType.THIS_MONTH
+        HomeStatType.THIS_MONTH -> HomeStatType.THIS_YEAR
+        HomeStatType.THIS_YEAR -> HomeStatType.VOLUME_THIS_MONTH
+        HomeStatType.VOLUME_THIS_MONTH -> HomeStatType.TOTAL
+        // If somehow a left stat is selected, reset to default
+        else -> HomeStatType.TOTAL
     }
 }

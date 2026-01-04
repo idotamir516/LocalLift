@@ -14,10 +14,32 @@ import com.workout.app.util.SettingsManager
 import com.workout.app.util.TimerManager
 import com.workout.app.util.TimerState
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+
+/**
+ * Data class representing a pending set deletion that can be undone.
+ */
+data class PendingSetDeletion(
+    val exerciseIndex: Int,
+    val set: ActiveSet,
+    val originalSets: List<ActiveSet>
+)
+
+/**
+ * Events for showing snackbar messages.
+ */
+sealed class SnackbarEvent {
+    data class ShowUndo(val message: String) : SnackbarEvent()
+    object Dismiss : SnackbarEvent()
+}
 
 /**
  * State holder for ActiveWorkoutScreen.
@@ -37,6 +59,14 @@ class ActiveWorkoutState(
     
     private val _showExercisePicker = MutableStateFlow(false)
     val showExercisePicker: StateFlow<Boolean> = _showExercisePicker.asStateFlow()
+    
+    // Snackbar events for undo functionality
+    private val _snackbarEvent = MutableSharedFlow<SnackbarEvent>()
+    val snackbarEvent: SharedFlow<SnackbarEvent> = _snackbarEvent.asSharedFlow()
+    
+    // Pending set deletion that can be undone
+    private var pendingDeletion: PendingSetDeletion? = null
+    private var deletionJob: Job? = null
     
     private val audioPlayer = AudioPlayer(context)
     private val settingsManager = SettingsManager.getInstance(context)
@@ -62,9 +92,16 @@ class ActiveWorkoutState(
                 val previousLiftSource = settingsManager.getPreviousLiftSourceSync()
                 val templateId = sessionWithDetails.session.templateId
                 
+                // Load template exercises to get notes
+                val templateExercises = if (templateId != null) {
+                    database.templateDao().getFullTemplateWithExercisesAndSets(templateId)?.exercises
+                        ?.associate { it.exercise.exerciseName to it.exercise }
+                } else null
+                
                 // Convert to ActiveExercise format
                 _exercises.value = sessionWithDetails.exercises.map { exerciseWithSets ->
                     val exerciseName = exerciseWithSets.exerciseLog.exerciseName
+                    val templateExercise = templateExercises?.get(exerciseName)
                     
                     // Load previous set data for this exercise
                     val previousSets = when {
@@ -88,6 +125,8 @@ class ActiveWorkoutState(
                         exerciseName = exerciseName,
                         restSeconds = exerciseWithSets.sets.firstOrNull()?.restSeconds,
                         showRpe = exerciseWithSets.exerciseLog.showRpe,
+                        templateExerciseId = templateExercise?.id,
+                        note = templateExercise?.note,
                         sets = run {
                             // Sort current sets by setNumber
                             val sortedSets = exerciseWithSets.sets.sortedBy { it.setNumber }
@@ -119,6 +158,7 @@ class ActiveWorkoutState(
                                     isCompleted = setLog.completedAt != null,
                                     previousWeight = matchingPreviousSet?.weightLbs?.toInt(),
                                     previousReps = matchingPreviousSet?.reps,
+                                    previousRpe = matchingPreviousSet?.rpe,
                                     restSeconds = setLog.restSeconds,
                                     setType = setLog.setType
                                 )
@@ -277,7 +317,30 @@ class ActiveWorkoutState(
     }
     
     /**
+     * Updates the note for an exercise and persists to the template.
+     */
+    fun updateExerciseNote(exerciseIndex: Int, note: String?) {
+        val currentExercises = _exercises.value.toMutableList()
+        if (exerciseIndex >= currentExercises.size) return
+        
+        val exercise = currentExercises[exerciseIndex]
+        val trimmedNote = note?.trim()?.takeIf { it.isNotEmpty() }
+        
+        currentExercises[exerciseIndex] = exercise.copy(note = trimmedNote)
+        _exercises.value = currentExercises
+        
+        // Save to template if we have a templateExerciseId
+        val templateExerciseId = exercise.templateExerciseId
+        if (templateExerciseId != null) {
+            scope.launch {
+                database.templateDao().updateTemplateExerciseNote(templateExerciseId, trimmedNote)
+            }
+        }
+    }
+    
+    /**
      * Marks a set as complete, saves to database, and starts rest timer.
+     * If completing and weight/reps are empty but previous values exist, auto-fill from previous.
      */
     fun completeSet(exerciseIndex: Int, setNumber: Int) {
         val currentExercises = _exercises.value.toMutableList()
@@ -290,11 +353,41 @@ class ActiveWorkoutState(
         val newIsCompleted = !setToComplete.isCompleted
         val completedAt = if (newIsCompleted) System.currentTimeMillis() else null
         
+        // Auto-fill from previous values if completing with empty inputs
+        val finalWeight = if (newIsCompleted && setToComplete.weight == null && setToComplete.previousWeight != null) {
+            setToComplete.previousWeight
+        } else {
+            setToComplete.weight
+        }
+        
+        val finalReps = if (newIsCompleted && setToComplete.reps == null && setToComplete.previousReps != null) {
+            setToComplete.previousReps
+        } else {
+            setToComplete.reps
+        }
+        
+        val finalRpe = if (newIsCompleted && setToComplete.rpe == null && setToComplete.previousRpe != null) {
+            setToComplete.previousRpe
+        } else {
+            setToComplete.rpe
+        }
+        
         // Update both the ActiveSet fields AND the underlying SetLog
-        val updatedSetLog = setToComplete.setLog.copy(completedAt = completedAt)
+        val updatedSetLog = setToComplete.setLog.copy(
+            completedAt = completedAt,
+            weightLbs = finalWeight?.toFloat(),
+            reps = finalReps,
+            rpe = finalRpe
+        )
         val updatedSets = exercise.sets.map { set ->
             if (set.setNumber == setNumber) {
-                set.copy(isCompleted = newIsCompleted, setLog = updatedSetLog)
+                set.copy(
+                    isCompleted = newIsCompleted,
+                    weight = finalWeight,
+                    reps = finalReps,
+                    rpe = finalRpe,
+                    setLog = updatedSetLog
+                )
             } else {
                 set
             }
@@ -414,10 +507,14 @@ class ActiveWorkoutState(
     
     /**
      * Removes a set from an exercise by its stable database ID.
-     * This is more reliable than removing by setNumber since IDs don't change during renumbering.
+     * Uses soft delete with undo - the set is removed from UI immediately but database deletion
+     * is delayed to allow the user to undo the action.
      */
     fun removeSetById(exerciseIndex: Int, setId: Long) {
         android.util.Log.d("SwipeDebug", "removeSetById called: exerciseIndex=$exerciseIndex, setId=$setId")
+        
+        // If there's a pending deletion, commit it immediately before starting a new one
+        commitPendingDeletion()
         
         val currentExercises = _exercises.value.toMutableList()
         if (exerciseIndex >= currentExercises.size) {
@@ -434,6 +531,13 @@ class ActiveWorkoutState(
             return
         }
         android.util.Log.d("SwipeDebug", "removeSetById: found setToRemove id=${setToRemove.setLog.id}, setNumber=${setToRemove.setNumber}")
+        
+        // Store the pending deletion for potential undo
+        pendingDeletion = PendingSetDeletion(
+            exerciseIndex = exerciseIndex,
+            set = setToRemove,
+            originalSets = exercise.sets.toList()
+        )
         
         // Remove the set and renumber remaining sets to keep consecutive numbers
         val remainingSets = exercise.sets.filter { it.setLog.id != setId }
@@ -454,22 +558,82 @@ class ActiveWorkoutState(
         
         android.util.Log.d("SwipeDebug", "removeSetById: renumberedSets: ${renumberedSets.map { "id=${it.setLog.id},num=${it.setNumber}" }}")
         
-        // Update local state immediately
+        // Update local state immediately (soft delete)
         currentExercises[exerciseIndex] = exercise.copy(sets = renumberedSets)
         _exercises.value = currentExercises
         android.util.Log.d("SwipeDebug", "removeSetById: state updated, exercise now has ${renumberedSets.size} sets")
         
+        // Show snackbar and start delayed deletion
+        scope.launch {
+            _snackbarEvent.emit(SnackbarEvent.ShowUndo("Set deleted"))
+        }
+        
+        // Cancel any existing deletion job and start a new one
+        deletionJob?.cancel()
+        deletionJob = scope.launch {
+            delay(5000) // 5 second window to undo
+            commitPendingDeletion()
+        }
+    }
+    
+    /**
+     * Commits the pending deletion to the database.
+     * Called after the undo timeout expires or when starting a new deletion.
+     */
+    private fun commitPendingDeletion() {
+        val deletion = pendingDeletion ?: return
+        pendingDeletion = null
+        deletionJob?.cancel()
+        deletionJob = null
+        
+        android.util.Log.d("SwipeDebug", "commitPendingDeletion: committing deletion of set id=${deletion.set.setLog.id}")
+        
         scope.launch {
             // Delete from database
-            database.sessionDao().deleteSetLog(setId)
+            database.sessionDao().deleteSetLog(deletion.set.setLog.id)
             
             // Update renumbered sets in database
-            val setsToUpdate = renumberedSets
-                .filter { set -> remainingSets.any { it.setLog.id == set.setLog.id && it.setNumber != set.setNumber } }
-                .map { it.setLog }
-            if (setsToUpdate.isNotEmpty()) {
-                database.sessionDao().updateSetLogs(setsToUpdate)
+            val currentExercises = _exercises.value
+            if (deletion.exerciseIndex < currentExercises.size) {
+                val exercise = currentExercises[deletion.exerciseIndex]
+                val setsToUpdate = exercise.sets
+                    .filter { set -> 
+                        deletion.originalSets.any { original -> 
+                            original.setLog.id == set.setLog.id && original.setNumber != set.setNumber 
+                        }
+                    }
+                    .map { it.setLog }
+                if (setsToUpdate.isNotEmpty()) {
+                    database.sessionDao().updateSetLogs(setsToUpdate)
+                }
             }
+            
+            _snackbarEvent.emit(SnackbarEvent.Dismiss)
+        }
+    }
+    
+    /**
+     * Undoes the pending set deletion.
+     * Restores the set to its original position in the UI.
+     */
+    fun undoSetDeletion() {
+        val deletion = pendingDeletion ?: return
+        pendingDeletion = null
+        deletionJob?.cancel()
+        deletionJob = null
+        
+        android.util.Log.d("SwipeDebug", "undoSetDeletion: restoring set id=${deletion.set.setLog.id}")
+        
+        // Restore the original sets
+        val currentExercises = _exercises.value.toMutableList()
+        if (deletion.exerciseIndex < currentExercises.size) {
+            val exercise = currentExercises[deletion.exerciseIndex]
+            currentExercises[deletion.exerciseIndex] = exercise.copy(sets = deletion.originalSets)
+            _exercises.value = currentExercises
+        }
+        
+        scope.launch {
+            _snackbarEvent.emit(SnackbarEvent.Dismiss)
         }
     }
     

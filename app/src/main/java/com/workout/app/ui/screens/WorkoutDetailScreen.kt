@@ -18,7 +18,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Edit
@@ -107,7 +107,7 @@ fun WorkoutDetailScreen(
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(
-                            imageVector = Icons.Default.ArrowBack,
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Back"
                         )
                     }
@@ -163,7 +163,10 @@ fun WorkoutDetailScreen(
             ) {
                 // Workout summary card
                 item {
-                    WorkoutSummaryCard(session = sessionWithDetails.session)
+                    WorkoutSummaryCard(
+                        session = sessionWithDetails.session,
+                        exercises = sessionWithDetails.exercises
+                    )
                 }
                 
                 // Exercises
@@ -301,6 +304,7 @@ fun WorkoutDetailScreen(
 @Composable
 private fun WorkoutSummaryCard(
     session: WorkoutSession,
+    exercises: List<ExerciseWithSets> = emptyList(),
     modifier: Modifier = Modifier
 ) {
     val dateFormat = SimpleDateFormat("EEEE, MMMM d, yyyy", Locale.getDefault())
@@ -322,6 +326,15 @@ private fun WorkoutSummaryCard(
             "${remainingMinutes} min"
         }
     } ?: "In progress"
+    
+    // Calculate total volume (weight × reps for all completed sets)
+    val totalVolume = exercises.sumOf { exercise ->
+        exercise.sets
+            .filter { it.completedAt != null && it.weightLbs != null && it.reps != null }
+            .sumOf { set -> (set.weightLbs!! * set.reps!!).toDouble() }
+    }.toFloat()
+    
+    val formattedVolume = formatVolume(totalVolume)
     
     Surface(
         modifier = modifier.fillMaxWidth(),
@@ -436,9 +449,50 @@ private fun WorkoutSummaryCard(
                             )
                         }
                     }
+                    
+                    if (totalVolume > 0) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.FitnessCenter,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier
+                                    .padding(end = 4.dp)
+                                    .size(18.dp)
+                            )
+                            Column {
+                                Text(
+                                    text = "Volume",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Text(
+                                    text = "$formattedVolume lbs",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }
+    }
+}
+
+/**
+ * Formats volume in lbs to a compact, readable format.
+ * e.g., 45230 -> "45.2K", 1234567 -> "1.2M"
+ */
+private fun formatVolume(volume: Float): String {
+    return when {
+        volume >= 1_000_000 -> String.format("%.1fM", volume / 1_000_000)
+        volume >= 10_000 -> String.format("%.1fK", volume / 1_000)
+        volume >= 1_000 -> String.format("%.2fK", volume / 1_000)
+        else -> String.format("%.0f", volume)
     }
 }
 

@@ -55,6 +55,106 @@ interface SessionDao {
     @Query("SELECT * FROM workout_sessions WHERE isCompleted = 1 ORDER BY completedAt DESC")
     fun getCompletedSessions(): Flow<List<WorkoutSession>>
     
+    // Get most recent completed session
+    @Query("SELECT * FROM workout_sessions WHERE isCompleted = 1 ORDER BY completedAt DESC LIMIT 1")
+    fun getMostRecentSession(): Flow<WorkoutSession?>
+    
+    // Get count of completed workouts
+    @Query("SELECT COUNT(*) FROM workout_sessions WHERE isCompleted = 1")
+    fun getTotalWorkoutCount(): Flow<Int>
+    
+    // Get count of workouts completed this week (since Monday)
+    @Query("""
+        SELECT COUNT(*) FROM workout_sessions 
+        WHERE isCompleted = 1 
+        AND completedAt >= :weekStartMillis
+    """)
+    fun getWorkoutsThisWeek(weekStartMillis: Long): Flow<Int>
+    
+    // Get count of workouts completed this month
+    @Query("""
+        SELECT COUNT(*) FROM workout_sessions 
+        WHERE isCompleted = 1 
+        AND completedAt >= :monthStartMillis
+    """)
+    fun getWorkoutsThisMonth(monthStartMillis: Long): Flow<Int>
+    
+    // Get count of workouts completed this year
+    @Query("""
+        SELECT COUNT(*) FROM workout_sessions 
+        WHERE isCompleted = 1 
+        AND completedAt >= :yearStartMillis
+    """)
+    fun getWorkoutsThisYear(yearStartMillis: Long): Flow<Int>
+    
+    // Get total volume (weight × reps) for workouts this week
+    @Query("""
+        SELECT COALESCE(SUM(sl.weightLbs * sl.reps), 0)
+        FROM set_logs sl
+        INNER JOIN exercise_logs el ON sl.exerciseLogId = el.id
+        INNER JOIN workout_sessions ws ON el.sessionId = ws.id
+        WHERE ws.isCompleted = 1 
+        AND ws.completedAt >= :weekStartMillis
+        AND sl.completedAt IS NOT NULL
+    """)
+    fun getVolumeThisWeek(weekStartMillis: Long): Flow<Float>
+    
+    // Get total volume for last week (for comparison)
+    @Query("""
+        SELECT COALESCE(SUM(sl.weightLbs * sl.reps), 0)
+        FROM set_logs sl
+        INNER JOIN exercise_logs el ON sl.exerciseLogId = el.id
+        INNER JOIN workout_sessions ws ON el.sessionId = ws.id
+        WHERE ws.isCompleted = 1 
+        AND ws.completedAt >= :lastWeekStartMillis
+        AND ws.completedAt < :thisWeekStartMillis
+        AND sl.completedAt IS NOT NULL
+    """)
+    fun getVolumeLastWeek(lastWeekStartMillis: Long, thisWeekStartMillis: Long): Flow<Float>
+    
+    // Get total volume for this month
+    @Query("""
+        SELECT COALESCE(SUM(sl.weightLbs * sl.reps), 0)
+        FROM set_logs sl
+        INNER JOIN exercise_logs el ON sl.exerciseLogId = el.id
+        INNER JOIN workout_sessions ws ON el.sessionId = ws.id
+        WHERE ws.isCompleted = 1 
+        AND ws.completedAt >= :monthStartMillis
+        AND sl.completedAt IS NOT NULL
+    """)
+    fun getVolumeThisMonth(monthStartMillis: Long): Flow<Float>
+    
+    // Get current workout streak (consecutive days with at least one workout)
+    // This returns all workout dates so we can calculate streak in code
+    @Query("""
+        SELECT DISTINCT date(completedAt / 1000, 'unixepoch', 'localtime') as workoutDate
+        FROM workout_sessions 
+        WHERE isCompleted = 1 AND completedAt IS NOT NULL
+        ORDER BY completedAt DESC
+    """)
+    fun getDistinctWorkoutDates(): Flow<List<String>>
+    
+    // Get weekly average (total workouts / weeks since first workout)
+    @Query("""
+        SELECT MIN(completedAt) FROM workout_sessions 
+        WHERE isCompleted = 1 AND completedAt IS NOT NULL
+    """)
+    fun getFirstWorkoutDate(): Flow<Long?>
+    
+    // Get all completed workout dates (for calendar highlighting)
+    @Query("SELECT completedAt FROM workout_sessions WHERE isCompleted = 1 AND completedAt IS NOT NULL")
+    fun getWorkoutDates(): Flow<List<Long>>
+    
+    // Get workouts for a specific date range (for calendar day detail)
+    @Query("""
+        SELECT * FROM workout_sessions 
+        WHERE isCompleted = 1 
+        AND completedAt >= :startOfDay 
+        AND completedAt < :endOfDay 
+        ORDER BY completedAt DESC
+    """)
+    fun getWorkoutsForDate(startOfDay: Long, endOfDay: Long): Flow<List<WorkoutSession>>
+    
     // Get session by ID
     @Query("SELECT * FROM workout_sessions WHERE id = :sessionId")
     suspend fun getSessionById(sessionId: Long): WorkoutSession?
@@ -175,7 +275,8 @@ interface SessionDao {
         val setNumber: Int,
         val setType: SetType,
         val weightLbs: Float?,
-        val reps: Int?
+        val reps: Int?,
+        val rpe: Float?
     )
     
     /**
@@ -187,7 +288,7 @@ interface SessionDao {
      * @param currentSessionId The current session ID to exclude
      */
     @Query("""
-        SELECT el.exerciseName, sl.setNumber, sl.setType, sl.weightLbs, sl.reps
+        SELECT el.exerciseName, sl.setNumber, sl.setType, sl.weightLbs, sl.reps, sl.rpe
         FROM set_logs sl
         INNER JOIN exercise_logs el ON sl.exerciseLogId = el.id
         INNER JOIN workout_sessions ws ON el.sessionId = ws.id
@@ -211,7 +312,7 @@ interface SessionDao {
      * @param currentSessionId The current session ID to exclude
      */
     @Query("""
-        SELECT el.exerciseName, sl.setNumber, sl.setType, sl.weightLbs, sl.reps
+        SELECT el.exerciseName, sl.setNumber, sl.setType, sl.weightLbs, sl.reps, sl.rpe
         FROM set_logs sl
         INNER JOIN exercise_logs el ON sl.exerciseLogId = el.id
         INNER JOIN workout_sessions ws ON el.sessionId = ws.id

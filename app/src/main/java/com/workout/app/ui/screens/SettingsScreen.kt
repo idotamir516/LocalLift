@@ -60,8 +60,7 @@ import com.workout.app.util.SettingsManager
 @Composable
 fun SettingsScreen(
     settingsManager: SettingsManager,
-    onNavigateBack: () -> Unit = {},
-    onNavigateToTrainingPhases: () -> Unit = {}
+    onNavigateBack: () -> Unit = {}
 ) {
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     
@@ -285,15 +284,6 @@ fun SettingsScreen(
                     ),
                     selectedOption = estimatedSecondsPerSet,
                     onOptionSelected = { settingsManager.setEstimatedSecondsPerSet(it) }
-                )
-            }
-            
-            // Training Section
-            SettingsSection(title = "Training") {
-                NavigationSettingRow(
-                    label = "Training Phases",
-                    description = "Track bulk, cut, maintenance phases",
-                    onClick = onNavigateToTrainingPhases
                 )
             }
             

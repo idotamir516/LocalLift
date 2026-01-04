@@ -78,6 +78,7 @@ fun SetRow(
     isCompleted: Boolean,
     previousWeight: Int? = null,
     previousReps: Int? = null,
+    previousRpe: Float? = null,
     restSeconds: Int? = null,
     setType: SetType = SetType.REGULAR,
     @Suppress("UNUSED_PARAMETER") showRemoveButton: Boolean = false, // Deprecated - swipe to delete instead
@@ -157,21 +158,23 @@ fun SetRow(
             
             Spacer(modifier = Modifier.width(8.dp))
             
-            // Weight input - with dark background
+            // Weight input - with dark background and ghost text from previous
             InputField(
                 value = weight?.toString() ?: "",
                 onValueChange = { onWeightChange(it.toIntOrNull()) },
                 enabled = !isCompleted,
+                placeholder = previousWeight?.toString(),
                 modifier = Modifier.weight(1f)
             )
             
             Spacer(modifier = Modifier.width(8.dp))
             
-            // Reps input - with dark background  
+            // Reps input - with dark background and ghost text from previous
             InputField(
                 value = reps?.toString() ?: "",
                 onValueChange = { onRepsChange(it.toIntOrNull()) },
                 enabled = !isCompleted,
+                placeholder = previousReps?.toString(),
                 modifier = Modifier.weight(1f)
             )
             
@@ -183,6 +186,7 @@ fun SetRow(
                     value = rpe,
                     onValueChange = onRpeChange,
                     enabled = !isCompleted,
+                    placeholder = previousRpe,
                     modifier = Modifier.weight(0.8f)
                 )
             }
@@ -191,6 +195,11 @@ fun SetRow(
             
             // Checkbox for completion - with border when unchecked
             // Clickable to toggle completion (can uncomplete by clicking again)
+            // Can complete if either: has current values OR has previous values to use
+            val hasValues = weight != null && reps != null
+            val hasPreviousValues = previousWeight != null && previousReps != null
+            val canComplete = hasValues || hasPreviousValues
+            
             Box(
                 modifier = Modifier
                     .size(28.dp)
@@ -201,11 +210,12 @@ fun SetRow(
                     .border(
                         width = 2.dp,
                         color = if (isCompleted) MaterialTheme.colorScheme.primary 
-                               else if (weight != null && reps != null) MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
+                               else if (hasValues) MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
+                               else if (hasPreviousValues) MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
                                else InputFieldBorder,
                         shape = RoundedCornerShape(6.dp)
                     )
-                    .clickable(enabled = (weight != null && reps != null) || isCompleted) {
+                    .clickable(enabled = canComplete || isCompleted) {
                         onCompleteClick()
                     },
                 contentAlignment = Alignment.Center
@@ -288,6 +298,7 @@ private fun InputField(
     value: String,
     onValueChange: (String) -> Unit,
     enabled: Boolean,
+    placeholder: String? = null,
     modifier: Modifier = Modifier
 ) {
     Box(
@@ -329,9 +340,12 @@ private fun InputField(
                 ) {
                     if (value.isEmpty()) {
                         Text(
-                            text = "—",
+                            text = placeholder ?: "—",
                             style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f),
+                            color = if (placeholder != null) 
+                                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                            else 
+                                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f),
                             textAlign = TextAlign.Center
                         )
                     }
@@ -343,80 +357,82 @@ private fun InputField(
 }
 
 /**
- * Custom input field for RPE (Rate of Perceived Exertion) values 1-10
+ * Custom dropdown picker for RPE (Rate of Perceived Exertion) values 5-10
  */
 @Composable
 private fun RpeInputField(
     value: Float?,
     onValueChange: (Float?) -> Unit,
     enabled: Boolean,
+    placeholder: Float? = null,
     modifier: Modifier = Modifier
 ) {
-    val displayValue = value?.let { 
-        if (it == it.toInt().toFloat()) it.toInt().toString() 
-        else String.format("%.1f", it)
-    } ?: ""
+    var expanded by remember { mutableStateOf(false) }
     
-    Box(
-        modifier = modifier
-            .height(48.dp)
-            .clip(RoundedCornerShape(8.dp))
-            .background(InputFieldBackground)
-            .border(
-                width = 1.dp,
-                color = InputFieldBorder,
-                shape = RoundedCornerShape(8.dp)
-            ),
-        contentAlignment = Alignment.Center
-    ) {
-        BasicTextField(
-            value = displayValue,
-            onValueChange = { newValue ->
-                if (newValue.isEmpty()) {
-                    onValueChange(null)
-                } else {
-                    // Allow numbers and one decimal point
-                    val parsed = newValue.toFloatOrNull()
-                    if (parsed != null && parsed >= 1f && parsed <= 10f) {
-                        onValueChange(parsed)
-                    } else if (newValue.matches(Regex("^\\d*\\.?\\d*$"))) {
-                        // Allow typing even if not yet valid (e.g., "1.")
-                        val partialParsed = newValue.toFloatOrNull()
-                        if (partialParsed == null || partialParsed <= 10f) {
-                            onValueChange(partialParsed)
-                        }
-                    }
-                }
-            },
-            enabled = enabled,
-            textStyle = MaterialTheme.typography.bodyLarge.copy(
-                color = MaterialTheme.colorScheme.onSurface,
-                textAlign = TextAlign.Center,
-                fontWeight = FontWeight.Medium
-            ),
-            singleLine = true,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+    // RPE options: null (no value), 5, 6, 7, 8, 9, 10
+    val rpeOptions = listOf<Float?>(null, 5f, 6f, 7f, 8f, 9f, 10f)
+    
+    val displayValue = value?.toInt()?.toString() ?: placeholder?.toInt()?.toString() ?: "—"
+    val isPlaceholderValue = value == null && placeholder != null
+    
+    Box(modifier = modifier) {
+        // The clickable field
+        Box(
             modifier = Modifier
+                .height(48.dp)
                 .fillMaxWidth()
-                .padding(horizontal = 8.dp),
-            decorationBox = { innerTextField ->
-                Box(
-                    contentAlignment = Alignment.Center,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    if (displayValue.isEmpty()) {
+                .clip(RoundedCornerShape(8.dp))
+                .background(InputFieldBackground)
+                .border(
+                    width = 1.dp,
+                    color = InputFieldBorder,
+                    shape = RoundedCornerShape(8.dp)
+                )
+                .clickable(enabled = enabled) { expanded = true },
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = displayValue,
+                style = MaterialTheme.typography.bodyLarge.copy(
+                    fontWeight = FontWeight.Medium,
+                    textAlign = TextAlign.Center
+                ),
+                color = if (value != null) 
+                    MaterialTheme.colorScheme.onSurface 
+                else if (isPlaceholderValue)
+                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                else 
+                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+            )
+        }
+        
+        // Dropdown menu
+        androidx.compose.material3.DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+            modifier = Modifier
+                .background(MaterialTheme.colorScheme.surface)
+        ) {
+            rpeOptions.forEach { option ->
+                androidx.compose.material3.DropdownMenuItem(
+                    text = {
                         Text(
-                            text = "—",
+                            text = option?.toInt()?.toString() ?: "—",
                             style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f),
-                            textAlign = TextAlign.Center
+                            fontWeight = if (option == value) FontWeight.Bold else FontWeight.Normal,
+                            color = if (option == value) 
+                                MaterialTheme.colorScheme.primary 
+                            else 
+                                MaterialTheme.colorScheme.onSurface
                         )
+                    },
+                    onClick = {
+                        onValueChange(option)
+                        expanded = false
                     }
-                    innerTextField()
-                }
+                )
             }
-        )
+        }
     }
 }
 

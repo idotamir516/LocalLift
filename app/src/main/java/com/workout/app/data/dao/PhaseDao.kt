@@ -79,4 +79,14 @@ interface PhaseDao {
         LIMIT 1
     """)
     suspend fun findOverlappingPhaseForOpenEndedPhase(startDate: Long, excludePhaseId: Long = 0): TrainingPhase?
+    
+    // Get all phases that overlap with a given date range (for chart background bands)
+    // A phase overlaps if: its start is before our end AND (its end is null OR its end is after our start)
+    @Query("""
+        SELECT * FROM training_phases 
+        WHERE startDate <= :endDate
+        AND (endDate IS NULL OR endDate >= :startDate)
+        ORDER BY startDate ASC
+    """)
+    suspend fun getPhasesInDateRange(startDate: Long, endDate: Long): List<TrainingPhase>
 }

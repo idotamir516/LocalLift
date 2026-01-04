@@ -153,6 +153,10 @@ interface TemplateDao {
     @Update
     suspend fun updateExercises(exercises: List<TemplateExercise>)
     
+    // Update exercise note
+    @Query("UPDATE template_exercises SET note = :note WHERE id = :exerciseId")
+    suspend fun updateTemplateExerciseNote(exerciseId: Long, note: String?)
+    
     // Delete exercise
     @Query("DELETE FROM template_exercises WHERE id = :exerciseId")
     suspend fun deleteExercise(exerciseId: Long)

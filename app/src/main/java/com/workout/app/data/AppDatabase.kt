@@ -12,12 +12,14 @@ import com.workout.app.data.dao.FolderDao
 import com.workout.app.data.dao.PhaseDao
 import com.workout.app.data.dao.SessionDao
 import com.workout.app.data.dao.TemplateDao
+import com.workout.app.data.dao.WeightDao
 import com.workout.app.data.entities.CustomExercise
 import com.workout.app.data.entities.ExerciseLog
 import com.workout.app.data.entities.SetLog
 import com.workout.app.data.entities.TemplateExercise
 import com.workout.app.data.entities.TemplateSet
 import com.workout.app.data.entities.TrainingPhase
+import com.workout.app.data.entities.WeightEntry
 import com.workout.app.data.entities.WorkoutFolder
 import com.workout.app.data.entities.WorkoutSession
 import com.workout.app.data.entities.WorkoutTemplate
@@ -157,6 +159,32 @@ val MIGRATION_9_10 = object : Migration(9, 10) {
     }
 }
 
+// Migration to add weight entries
+val MIGRATION_10_11 = object : Migration(10, 11) {
+    override fun migrate(database: SupportSQLiteDatabase) {
+        database.execSQL("""
+            CREATE TABLE IF NOT EXISTS weight_entries (
+                id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                weight REAL NOT NULL,
+                unit TEXT NOT NULL,
+                date INTEGER NOT NULL,
+                notes TEXT,
+                createdAt INTEGER NOT NULL
+            )
+        """)
+        
+        // Create index on date for faster queries
+        database.execSQL("CREATE INDEX IF NOT EXISTS index_weight_entries_date ON weight_entries(date)")
+    }
+}
+
+// Migration to add note field to template exercises
+val MIGRATION_11_12 = object : Migration(11, 12) {
+    override fun migrate(database: SupportSQLiteDatabase) {
+        database.execSQL("ALTER TABLE template_exercises ADD COLUMN note TEXT")
+    }
+}
+
 @Database(
     entities = [
         WorkoutTemplate::class,
@@ -167,9 +195,10 @@ val MIGRATION_9_10 = object : Migration(9, 10) {
         SetLog::class,
         CustomExercise::class,
         WorkoutFolder::class,
-        TrainingPhase::class
+        TrainingPhase::class,
+        WeightEntry::class
     ],
-    version = 10,
+    version = 12,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -180,6 +209,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun customExerciseDao(): CustomExerciseDao
     abstract fun folderDao(): FolderDao
     abstract fun phaseDao(): PhaseDao
+    abstract fun weightDao(): WeightDao
     
     companion object {
         @Volatile
@@ -192,7 +222,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "workout_database"
                 )
-                    .addMigrations(MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10)
+                    .addMigrations(MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12)
                     .build()
                 INSTANCE = instance
                 instance

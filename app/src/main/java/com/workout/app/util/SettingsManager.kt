@@ -18,6 +18,25 @@ enum class PreviousLiftSource {
 }
 
 /**
+ * Types of statistics that can be displayed on the home screen stat cards.
+ */
+enum class HomeStatType {
+    // Left card options (frequency focused)
+    THIS_WEEK,
+    CURRENT_STREAK,
+    WEEKLY_AVG,
+    
+    // Right card options (volume focused)
+    TOTAL,
+    THIS_MONTH,
+    THIS_YEAR,
+    
+    // Volume stats (can appear on either card)
+    VOLUME_THIS_WEEK,
+    VOLUME_THIS_MONTH
+}
+
+/**
  * Manages app settings using SharedPreferences.
  * Provides reactive access to settings via StateFlows.
  */
@@ -68,6 +87,16 @@ class SettingsManager(context: Context) {
     
     private val _vibrantColors = MutableStateFlow(prefs.getBoolean(KEY_VIBRANT_COLORS, DEFAULT_VIBRANT_COLORS))
     val vibrantColors: StateFlow<Boolean> = _vibrantColors.asStateFlow()
+    
+    private val _homeStatLeft = MutableStateFlow(
+        HomeStatType.valueOf(prefs.getString(KEY_HOME_STAT_LEFT, DEFAULT_HOME_STAT_LEFT.name) ?: DEFAULT_HOME_STAT_LEFT.name)
+    )
+    val homeStatLeft: StateFlow<HomeStatType> = _homeStatLeft.asStateFlow()
+    
+    private val _homeStatRight = MutableStateFlow(
+        HomeStatType.valueOf(prefs.getString(KEY_HOME_STAT_RIGHT, DEFAULT_HOME_STAT_RIGHT.name) ?: DEFAULT_HOME_STAT_RIGHT.name)
+    )
+    val homeStatRight: StateFlow<HomeStatType> = _homeStatRight.asStateFlow()
     
     // Setters
     fun setDefaultRestSeconds(seconds: Int) {
@@ -130,6 +159,16 @@ class SettingsManager(context: Context) {
         _vibrantColors.value = vibrant
     }
     
+    fun setHomeStatLeft(stat: HomeStatType) {
+        prefs.edit().putString(KEY_HOME_STAT_LEFT, stat.name).apply()
+        _homeStatLeft.value = stat
+    }
+    
+    fun setHomeStatRight(stat: HomeStatType) {
+        prefs.edit().putString(KEY_HOME_STAT_RIGHT, stat.name).apply()
+        _homeStatRight.value = stat
+    }
+    
     // Synchronous getters for non-reactive use
     fun getDefaultRestSecondsSync(): Int = prefs.getInt(KEY_DEFAULT_REST_SECONDS, DEFAULT_REST_SECONDS)
     fun getDefaultSetsPerExerciseSync(): Int = prefs.getInt(KEY_DEFAULT_SETS, DEFAULT_SETS)
@@ -164,6 +203,8 @@ class SettingsManager(context: Context) {
         private const val KEY_TIMER_STARTS_MINIMIZED = "timer_starts_minimized"
         private const val KEY_APP_THEME = "app_theme"
         private const val KEY_VIBRANT_COLORS = "vibrant_colors"
+        private const val KEY_HOME_STAT_LEFT = "home_stat_left"
+        private const val KEY_HOME_STAT_RIGHT = "home_stat_right"
         
         // Defaults
         const val DEFAULT_REST_SECONDS = 90
@@ -178,6 +219,8 @@ class SettingsManager(context: Context) {
         const val DEFAULT_TIMER_STARTS_MINIMIZED = false
         val DEFAULT_APP_THEME = AppTheme.CYAN
         const val DEFAULT_VIBRANT_COLORS = true
+        val DEFAULT_HOME_STAT_LEFT = HomeStatType.THIS_WEEK
+        val DEFAULT_HOME_STAT_RIGHT = HomeStatType.TOTAL
         
         @Volatile
         private var instance: SettingsManager? = null
