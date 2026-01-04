@@ -1,15 +1,64 @@
-*.iml
-.gradle
-/local.properties
-/.idea/caches
-/.idea/libraries
-/.idea/modules.xml
-/.idea/workspace.xml
-/.idea/navEditor.xml
-/.idea/assetWizardSettings.xml
+# Generic
 .DS_Store
-/build
-/captures
-.externalNativeBuild
-.cxx
+Thumbs.db
+*.log
+*.tmp
+*~
+*.swp
+
+# Gradle / build
+.gradle
+**/build/
+**/out/
+**/.gradle/
+
+# Local config
+/local.properties
 local.properties
+.env
+.env.*
+
+# IDEs
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+
+# Kotlin
+.kotlin/
+.kotlin-build/
+
+# KSP / KAPT / generated
+.ksp/
+kapt/
+generated/
+**/generated/
+
+# Native / external build
+.externalNativeBuild/
+.cxx/
+/captures/
+
+# Build artifacts / packages
+*.apk
+*.ap_
+*.aab
+*.aar
+*.zip
+*.class
+*.dex
+*.so
+*.o
+*.obj
+
+# Signing
+key.properties
+*.jks
+*.keystore
+keystore.properties
+
+# Misc
+out/
+
+# Keep the file intentionally minimal for repo cleanliness
