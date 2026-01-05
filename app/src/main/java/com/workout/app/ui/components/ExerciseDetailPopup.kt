@@ -33,6 +33,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -55,6 +56,7 @@ import com.workout.app.data.entities.PhaseType
 import com.workout.app.data.entities.SetType
 import com.workout.app.data.entities.TrainingPhase
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
@@ -84,6 +86,17 @@ data class OneRepMaxEntry(
     val date: Long,
     val estimatedMax: Float
 )
+
+/**
+ * Enum for chart time range selection.
+ */
+enum class ChartTimeRange(val days: Int?, val label: String) {
+    ONE_MONTH(30, "1M"),
+    THREE_MONTHS(90, "3M"),
+    SIX_MONTHS(180, "6M"),
+    ONE_YEAR(365, "1Y"),
+    ALL(null, "All")
+}
 
 /**
  * Popup dialog showing detailed information about an exercise.
@@ -382,20 +395,82 @@ private fun OneRepMaxSection(
             if (oneRepMaxHistory.size >= 2) {
                 Spacer(modifier = Modifier.height(16.dp))
                 
-                Text(
-                    text = "1RM Over Time",
-                    style = MaterialTheme.typography.labelMedium.copy(
-                        fontWeight = FontWeight.Medium
-                    ),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                var selectedTimeRange by remember { mutableStateOf(ChartTimeRange.ALL) }
+                
+                // Filter history based on selected time range
+                val filteredHistory = remember(oneRepMaxHistory, selectedTimeRange) {
+                    if (selectedTimeRange.days == null) {
+                        oneRepMaxHistory
+                    } else {
+                        val cutoffDate = Calendar.getInstance().apply {
+                            add(Calendar.DAY_OF_YEAR, -selectedTimeRange.days!!)
+                        }.timeInMillis
+                        oneRepMaxHistory.filter { it.date >= cutoffDate }
+                    }
+                }
+                
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "1RM Over Time",
+                        style = MaterialTheme.typography.labelMedium.copy(
+                            fontWeight = FontWeight.Medium
+                        ),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
                 
                 Spacer(modifier = Modifier.height(8.dp))
                 
-                OneRepMaxGraph(
-                    history = oneRepMaxHistory,
-                    phases = trainingPhases
-                )
+                // Time range selector
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterHorizontally)
+                ) {
+                    ChartTimeRange.entries.forEach { range ->
+                        FilterChip(
+                            selected = selectedTimeRange == range,
+                            onClick = { selectedTimeRange = range },
+                            label = {
+                                Text(
+                                    text = range.label,
+                                    style = MaterialTheme.typography.labelSmall
+                                )
+                            },
+                            modifier = Modifier.height(24.dp)
+                        )
+                    }
+                }
+                
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                if (filteredHistory.size >= 2) {
+                    OneRepMaxGraph(
+                        history = filteredHistory,
+                        phases = trainingPhases
+                    )
+                } else {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                        ),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text(
+                            text = "Not enough data in selected time range",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp)
+                        )
+                    }
+                }
             }
         } else {
             // No data available
@@ -535,11 +610,6 @@ private fun OneRepMaxGraph(
     val maxValue = sortedHistory.maxOfOrNull { it.estimatedMax } ?: 0f
     val minValue = sortedHistory.minOfOrNull { it.estimatedMax } ?: 0f
     val range = (maxValue - minValue).coerceAtLeast(0.1f) // Small minimum to avoid division by zero
-    
-    // Debug logging
-    android.util.Log.d("OneRepMaxGraph", "History size: ${sortedHistory.size}")
-    android.util.Log.d("OneRepMaxGraph", "Values: ${sortedHistory.map { it.estimatedMax }}")
-    android.util.Log.d("OneRepMaxGraph", "maxValue: $maxValue, minValue: $minValue, range: $range")
     
     // Get date range from history
     val minDate = sortedHistory.firstOrNull()?.date ?: 0L

@@ -521,6 +521,31 @@ fun AppNavigation() {
                 // Get workout dates for calendar
                 val workoutDates = remember { database.sessionDao().getWorkoutDates() }
                 
+                // Get session volumes for weekly volume chart
+                val sessionVolumes = remember { database.sessionDao().getAllSessionVolumes() }
+                val volumes by sessionVolumes.collectAsState(initial = emptyList())
+                
+                // Get completed sets for effective sets calculation
+                val completedSetsFlow = remember { database.sessionDao().getAllCompletedSets() }
+                
+                // Get custom exercises for muscle group lookup
+                val customExercisesFlow = remember { database.customExerciseDao().getAllCustomExercises() }
+                val customExercisesList by customExercisesFlow.collectAsState(initial = emptyList())
+                
+                // Get effective sets settings
+                val countWarmupAsEffective by settingsManager.countWarmupAsEffective.collectAsState()
+                val countDropSetAsEffective by settingsManager.countDropSetAsEffective.collectAsState()
+                
+                // Load training phases that overlap with volume data
+                var progressPhases by remember { mutableStateOf<List<com.workout.app.data.entities.TrainingPhase>>(emptyList()) }
+                LaunchedEffect(volumes) {
+                    if (volumes.isNotEmpty()) {
+                        val minDate = volumes.minOfOrNull { it.completedAt } ?: 0L
+                        val maxDate = volumes.maxOfOrNull { it.completedAt } ?: System.currentTimeMillis()
+                        progressPhases = database.phaseDao().getPhasesInDateRange(minDate, maxDate)
+                    }
+                }
+                
                 // State to hold CSV content for saving to file
                 var pendingCsvContent by remember { mutableStateOf<String?>(null) }
                 
@@ -546,6 +571,12 @@ fun AppNavigation() {
                 ProgressScreen(
                     completedSessions = completedSessions,
                     workoutDates = workoutDates,
+                    sessionVolumes = sessionVolumes,
+                    completedSets = completedSetsFlow,
+                    customExercises = customExercisesList,
+                    trainingPhases = progressPhases,
+                    countWarmupAsEffective = countWarmupAsEffective,
+                    countDropSetAsEffective = countDropSetAsEffective,
                     onWorkoutClick = { sessionId ->
                         navController.navigate(Screen.WorkoutDetail.createRoute(sessionId))
                     },
@@ -585,9 +616,22 @@ fun AppNavigation() {
             // Weight tracking screen
             composable(Screen.Weight.route) {
                 val weightEntries = remember { database.weightDao().getAllWeightEntries() }
+                val entries by weightEntries.collectAsState(initial = emptyList())
+                
+                // Load training phases that overlap with weight data
+                var trainingPhases by remember { mutableStateOf<List<com.workout.app.data.entities.TrainingPhase>>(emptyList()) }
+                LaunchedEffect(entries) {
+                    if (entries.size >= 2) {
+                        val sortedEntries = entries.sortedBy { it.date }
+                        val minDate = sortedEntries.first().date
+                        val maxDate = sortedEntries.last().date
+                        trainingPhases = database.phaseDao().getPhasesInDateRange(minDate, maxDate)
+                    }
+                }
                 
                 WeightScreen(
                     weightEntries = weightEntries,
+                    trainingPhases = trainingPhases,
                     onNavigateBack = { navController.popBackStack() },
                     onAddWeight = { weight, unit, date, notes ->
                         scope.launch {

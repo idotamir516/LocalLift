@@ -28,6 +28,24 @@ data class ExerciseWithSets(
 )
 
 /**
+ * Data class for session volume (date + total volume).
+ */
+data class SessionVolume(
+    val completedAt: Long,
+    val volume: Float
+)
+
+/**
+ * Data class for completed set data with exercise name and set type.
+ * Used for calculating effective sets by muscle group.
+ */
+data class CompletedSetData(
+    val completedAt: Long,
+    val exerciseName: String,
+    val setType: SetType
+)
+
+/**
  * Data class for session with full exercise and set data using Room relations.
  */
 data class SessionWithDetails(
@@ -123,6 +141,31 @@ interface SessionDao {
         AND sl.completedAt IS NOT NULL
     """)
     fun getVolumeThisMonth(monthStartMillis: Long): Flow<Float>
+    
+    // Get all completed sessions with their total volume for charting
+    @Query("""
+        SELECT ws.completedAt, COALESCE(SUM(sl.weightLbs * sl.reps), 0) as volume
+        FROM workout_sessions ws
+        LEFT JOIN exercise_logs el ON el.sessionId = ws.id
+        LEFT JOIN set_logs sl ON sl.exerciseLogId = el.id AND sl.completedAt IS NOT NULL
+        WHERE ws.isCompleted = 1 AND ws.completedAt IS NOT NULL
+        GROUP BY ws.id
+        ORDER BY ws.completedAt ASC
+    """)
+    fun getAllSessionVolumes(): Flow<List<SessionVolume>>
+
+    // Get all completed sets with exercise names and set types for effective sets calculation
+    @Query("""
+        SELECT ws.completedAt, el.exerciseName, sl.setType
+        FROM set_logs sl
+        INNER JOIN exercise_logs el ON sl.exerciseLogId = el.id
+        INNER JOIN workout_sessions ws ON el.sessionId = ws.id
+        WHERE ws.isCompleted = 1 
+          AND ws.completedAt IS NOT NULL
+          AND sl.completedAt IS NOT NULL
+        ORDER BY ws.completedAt ASC
+    """)
+    fun getAllCompletedSets(): Flow<List<CompletedSetData>>
     
     // Get current workout streak (consecutive days with at least one workout)
     // This returns all workout dates so we can calculate streak in code

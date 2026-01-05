@@ -2,6 +2,7 @@ package com.workout.app.ui.screens
 
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -61,12 +62,20 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.unit.dp
+import com.workout.app.data.entities.PhaseType
+import com.workout.app.data.entities.TrainingPhase
 import com.workout.app.data.entities.WeightEntry
 import com.workout.app.data.entities.WeightUnit
 import kotlinx.coroutines.flow.Flow
@@ -84,6 +93,7 @@ import java.util.Locale
 @Composable
 fun WeightScreen(
     weightEntries: Flow<List<WeightEntry>> = flowOf(emptyList()),
+    trainingPhases: List<TrainingPhase> = emptyList(),
     onNavigateBack: () -> Unit = {},
     onAddWeight: (weight: Double, unit: WeightUnit, date: Long, notes: String?) -> Unit = { _, _, _, _ -> },
     onUpdateWeight: (WeightEntry) -> Unit = {},
@@ -210,6 +220,17 @@ fun WeightScreen(
                         weightChange = weightChange,
                         thirtyDayChange = thirtyDayChange
                     )
+                }
+                
+                // Weight chart (show if at least 2 entries)
+                if (entries.size >= 2) {
+                    item {
+                        WeightChart(
+                            entries = entries.sortedBy { it.date },
+                            phases = trainingPhases,
+                            modifier = Modifier.padding(top = 8.dp)
+                        )
+                    }
                 }
                 
                 // History section header
@@ -383,6 +404,327 @@ private fun CurrentWeightCard(
                     color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.6f)
                 )
             }
+        }
+    }
+}
+
+/**
+ * Time range options for chart display.
+ */
+private enum class ChartTimeRange(val label: String, val days: Int?) {
+    ONE_MONTH("1M", 30),
+    THREE_MONTHS("3M", 90),
+    SIX_MONTHS("6M", 180),
+    ONE_YEAR("1Y", 365),
+    ALL("All", null)
+}
+
+/**
+ * Weight chart showing body weight over time.
+ */
+@Composable
+private fun WeightChart(
+    entries: List<WeightEntry>,
+    phases: List<TrainingPhase> = emptyList(),
+    modifier: Modifier = Modifier
+) {
+    if (entries.size < 2) return
+    
+    var selectedRange by remember { mutableStateOf(ChartTimeRange.ALL) }
+    
+    // Filter entries based on selected time range
+    val filteredEntries = remember(entries, selectedRange) {
+        if (selectedRange.days == null) {
+            entries
+        } else {
+            val cutoffDate = System.currentTimeMillis() - (selectedRange.days!! * 24L * 60 * 60 * 1000)
+            entries.filter { it.date >= cutoffDate }
+        }
+    }
+    
+    // Need at least 2 entries to draw a chart
+    if (filteredEntries.size < 2) {
+        Card(
+            modifier = modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+            )
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    text = "Weight Over Time",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = TextAlign.Center
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                TimeRangeSelector(
+                    selectedRange = selectedRange,
+                    onRangeSelected = { selectedRange = it },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    text = "Not enough data for this time range",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+        return
+    }
+    
+    // Convert all weights to the same unit (use the most recent entry's unit)
+    val displayUnit = filteredEntries.lastOrNull()?.unit ?: WeightUnit.KG
+    val weights = filteredEntries.map { 
+        if (displayUnit == WeightUnit.KG) it.toKg() else it.toLbs() 
+    }
+    
+    val maxWeight = weights.maxOrNull() ?: 0.0
+    val minWeight = weights.minOrNull() ?: 0.0
+    val range = (maxWeight - minWeight).coerceAtLeast(0.1)
+    
+    val minDate = filteredEntries.first().date
+    val maxDate = filteredEntries.last().date
+    val dateRange = (maxDate - minDate).coerceAtLeast(1L)
+    
+    // Filter phases that overlap with the chart's date range
+    val relevantPhases = phases.filter { phase ->
+        val phaseEnd = phase.endDate ?: System.currentTimeMillis()
+        phase.startDate <= maxDate && phaseEnd >= minDate
+    }
+    
+    // Color mapping for phase types
+    fun getPhaseColor(phaseType: PhaseType): Color {
+        return when (phaseType) {
+            PhaseType.BULK -> Color(0xFF4CAF50).copy(alpha = 0.15f)
+            PhaseType.CUT -> Color(0xFFF44336).copy(alpha = 0.15f)
+            PhaseType.MAINTENANCE -> Color(0xFF9E9E9E).copy(alpha = 0.15f)
+            PhaseType.STRENGTH -> Color(0xFF2196F3).copy(alpha = 0.15f)
+            PhaseType.HYPERTROPHY -> Color(0xFF9C27B0).copy(alpha = 0.15f)
+            PhaseType.DELOAD -> Color(0xFFFF9800).copy(alpha = 0.15f)
+            PhaseType.CUSTOM -> Color(0xFF607D8B).copy(alpha = 0.15f)
+        }
+    }
+    
+    fun getPhaseLabelColor(phaseType: PhaseType): Color {
+        return when (phaseType) {
+            PhaseType.BULK -> Color(0xFF388E3C)
+            PhaseType.CUT -> Color(0xFFD32F2F)
+            PhaseType.MAINTENANCE -> Color(0xFF757575)
+            PhaseType.STRENGTH -> Color(0xFF1976D2)
+            PhaseType.HYPERTROPHY -> Color(0xFF7B1FA2)
+            PhaseType.DELOAD -> Color(0xFFF57C00)
+            PhaseType.CUSTOM -> Color(0xFF455A64)
+        }
+    }
+    
+    val unitStr = if (displayUnit == WeightUnit.KG) "kg" else "lbs"
+    val lineColor = Color(0xFF2196F3) // Blue for weight
+    
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp)
+        ) {
+            Text(
+                text = "Weight Over Time",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.fillMaxWidth(),
+                textAlign = TextAlign.Center
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            TimeRangeSelector(
+                selectedRange = selectedRange,
+                onRangeSelected = { selectedRange = it },
+                modifier = Modifier.fillMaxWidth()
+            )
+            
+            Spacer(modifier = Modifier.height(12.dp))
+            
+            // Phase labels row (if we have phases)
+            if (relevantPhases.isNotEmpty()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 49.dp) // Account for Y-axis width
+                        .height(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    relevantPhases.forEach { phase ->
+                        val phaseEnd = phase.endDate ?: System.currentTimeMillis()
+                        val startX = ((phase.startDate.coerceAtLeast(minDate) - minDate).toFloat() / dateRange).coerceIn(0f, 1f)
+                        val endX = ((phaseEnd.coerceAtMost(maxDate) - minDate).toFloat() / dateRange).coerceIn(0f, 1f)
+                        val width = (endX - startX).coerceAtLeast(0f)
+                        
+                        if (width > 0.05f) {
+                            Spacer(modifier = Modifier.weight(startX.coerceAtLeast(0.001f)))
+                            Text(
+                                text = phase.name.take(10) + if (phase.name.length > 10) "…" else "",
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Medium),
+                                color = getPhaseLabelColor(phase.type),
+                                modifier = Modifier.weight(width.coerceAtLeast(0.001f)),
+                                maxLines = 1
+                            )
+                            Spacer(modifier = Modifier.weight((1f - endX).coerceAtLeast(0.001f)))
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(4.dp))
+            }
+            
+            Row(
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                // Y-axis labels
+                Column(
+                    modifier = Modifier
+                        .width(45.dp)
+                        .height(100.dp)
+                        .padding(vertical = 8.dp),
+                    verticalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = String.format("%.1f", maxWeight),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                    )
+                    Text(
+                        text = String.format("%.1f", minWeight),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                    )
+                }
+                
+                Spacer(modifier = Modifier.width(4.dp))
+                
+                // Chart canvas
+                Canvas(
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(100.dp)
+                ) {
+                    val width = size.width
+                    val height = size.height
+                    val paddingTop = height * 0.1f
+                    val paddingBottom = height * 0.1f
+                    val usableHeight = height - paddingTop - paddingBottom
+                    
+                    // Draw phase background bands first
+                    relevantPhases.forEach { phase ->
+                        val phaseEnd = phase.endDate ?: System.currentTimeMillis()
+                        val startX = ((phase.startDate.coerceAtLeast(minDate) - minDate).toFloat() / dateRange) * width
+                        val endX = ((phaseEnd.coerceAtMost(maxDate) - minDate).toFloat() / dateRange) * width
+                        
+                        if (endX > startX) {
+                            drawRect(
+                                color = getPhaseColor(phase.type),
+                                topLeft = Offset(startX, 0f),
+                                size = Size(endX - startX, height)
+                            )
+                        }
+                    }
+                    
+                    // Draw line path
+                    val path = Path()
+                    filteredEntries.forEachIndexed { index, entry ->
+                        val weight = if (displayUnit == WeightUnit.KG) entry.toKg() else entry.toLbs()
+                        val x = ((entry.date - minDate).toFloat() / dateRange) * width
+                        val normalizedY = (weight - minWeight) / range
+                        val y = height - paddingBottom - (normalizedY.toFloat() * usableHeight)
+                        
+                        if (index == 0) {
+                            path.moveTo(x, y)
+                        } else {
+                            path.lineTo(x, y)
+                        }
+                    }
+                    
+                    drawPath(
+                        path = path,
+                        color = lineColor,
+                        style = Stroke(
+                            width = 3.dp.toPx(),
+                            cap = StrokeCap.Round
+                        )
+                    )
+                    
+                    // Draw points
+                    filteredEntries.forEach { entry ->
+                        val weight = if (displayUnit == WeightUnit.KG) entry.toKg() else entry.toLbs()
+                        val x = ((entry.date - minDate).toFloat() / dateRange) * width
+                        val normalizedY = (weight - minWeight) / range
+                        val y = height - paddingBottom - (normalizedY.toFloat() * usableHeight)
+                        
+                        drawCircle(
+                            color = lineColor,
+                            radius = 5.dp.toPx(),
+                            center = Offset(x, y)
+                        )
+                    }
+                }
+            }
+            
+            // X-axis date labels
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 49.dp), // Offset for Y-axis
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                val dateFormat = SimpleDateFormat("MMM d", Locale.getDefault())
+                Text(
+                    text = dateFormat.format(Date(minDate)),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                )
+                Text(
+                    text = dateFormat.format(Date(maxDate)),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Compact time range selector using filter chips.
+ */
+@Composable
+private fun TimeRangeSelector(
+    selectedRange: ChartTimeRange,
+    onRangeSelected: (ChartTimeRange) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier,
+        horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterHorizontally)
+    ) {
+        ChartTimeRange.entries.forEach { range ->
+            FilterChip(
+                selected = selectedRange == range,
+                onClick = { onRangeSelected(range) },
+                label = {
+                    Text(
+                        text = range.label,
+                        style = MaterialTheme.typography.labelSmall
+                    )
+                },
+                modifier = Modifier.height(28.dp),
+                colors = FilterChipDefaults.filterChipColors(
+                    selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                    selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+            )
         }
     }
 }
