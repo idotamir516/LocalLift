@@ -51,8 +51,9 @@ object ExerciseLibrary {
         Exercise("Bench Press", "Chest", listOf("Triceps", "Shoulders")),
         Exercise("Incline Bench Press", "Chest", listOf("Shoulders", "Triceps")),
         Exercise("Decline Bench Press", "Chest", listOf("Triceps")),
-        Exercise("Dumbbell Fly", "Chest"),
-        Exercise("Incline Dumbbell Fly", "Chest", listOf("Shoulders")),
+        Exercise("Dumbbell Flye", "Chest"),
+        Exercise("Incline Dumbbell Flye", "Chest", listOf("Shoulders")),
+        Exercise("Machine Flye", "Chest"),
         Exercise("Push-ups", "Chest", listOf("Triceps", "Shoulders", "Core"), isBodyweight = true),
         Exercise("Cable Crossover", "Chest"),
         Exercise("Dips (Chest)", "Chest", listOf("Triceps", "Shoulders"), isBodyweight = true),
@@ -64,6 +65,7 @@ object ExerciseLibrary {
         Exercise("Pull-ups", "Back", listOf("Biceps", "Forearms"), isBodyweight = true),
         Exercise("Chin-ups", "Back", listOf("Biceps", "Forearms"), isBodyweight = true),
         Exercise("Lat Pulldown", "Back", listOf("Biceps")),
+        Exercise("Single Arm Lat Pulldown", "Back", listOf("Biceps")),
         Exercise("Close Grip Lat Pulldown", "Back", listOf("Biceps")),
         Exercise("Half-Kneeling Lat Pulldown", "Back", listOf("Biceps")),
         Exercise("Barbell Row", "Back", listOf("Biceps", "Lower Back", "Trapezius")),
@@ -74,6 +76,7 @@ object ExerciseLibrary {
         Exercise("Face Pull", "Back", listOf("Shoulders", "Trapezius")),
         Exercise("Straight Arm Pulldown", "Back"),
         Exercise("Pendlay Row", "Back", listOf("Biceps", "Lower Back")),
+        Exercise("Cable Pullover", "Back"),
         
         // ===== LOWER BACK =====
         Exercise("Back Extension", "Lower Back", listOf("Glutes", "Hamstrings")),
@@ -94,7 +97,8 @@ object ExerciseLibrary {
         Exercise("Dumbbell Shoulder Press", "Shoulders", listOf("Triceps")),
         Exercise("Lateral Raise", "Shoulders"),
         Exercise("Front Raise", "Shoulders"),
-        Exercise("Reverse Fly", "Shoulders", listOf("Back", "Trapezius")),
+        Exercise("Machine Reverse Flye", "Shoulders", listOf("Back", "Trapezius")),
+        Exercise("Cable Reverse Flye", "Shoulders", listOf("Back", "Trapezius")),
         Exercise("Arnold Press", "Shoulders", listOf("Triceps")),
         Exercise("Cable Lateral Raise", "Shoulders"),
         Exercise("Machine Shoulder Press", "Shoulders", listOf("Triceps")),
@@ -135,14 +139,15 @@ object ExerciseLibrary {
         // ===== QUADS =====
         Exercise("Squat", "Quads", listOf("Glutes", "Adductors", "Core", "Lower Back")),
         Exercise("Front Squat", "Quads", listOf("Core", "Glutes")),
-        Exercise("Leg Press", "Quads", listOf("Glutes")),
+        Exercise("Leg Press", "Quads", listOf("Glutes", "Calves")),
         Exercise("Leg Extension", "Quads"),
         Exercise("Hack Squat", "Quads", listOf("Glutes")),
         Exercise("Sissy Squat", "Quads", isBodyweight = true),
-        Exercise("Walking Lunges", "Quads", listOf("Glutes", "Hamstrings")),
+        Exercise("Walking Lunges (Quads)", "Quads", listOf("Glutes", "Hamstrings")),
         Exercise("Step-ups", "Quads", listOf("Glutes")),
         Exercise("Goblet Squat", "Quads", listOf("Glutes", "Core")),
         Exercise("Pause Squat", "Quads", listOf("Glutes", "Core")),
+        Exercise("Bulgarian Split Squat (Quads)", "Quads", listOf("Glutes", "Adductors")),
         
         // ===== HAMSTRINGS =====
         Exercise("Romanian Deadlift", "Hamstrings", listOf("Glutes", "Lower Back")),
@@ -151,7 +156,7 @@ object ExerciseLibrary {
         Exercise("Stiff Leg Deadlift", "Hamstrings", listOf("Glutes", "Lower Back")),
         Exercise("Nordic Curl", "Hamstrings", isBodyweight = true),
         Exercise("Glute Ham Raise", "Hamstrings", listOf("Glutes", "Lower Back")),
-        Exercise("Deadlift", "Hamstrings", listOf("Lower Back", "Glutes", "Trapezius", "Forearms")),
+        Exercise("Deadlift", "Hamstrings", listOf("Lower Back", "Glutes", "Trapezius")),
         Exercise("Single Leg Romanian Deadlift", "Hamstrings", listOf("Glutes", "Core")),
         
         // ===== GLUTES =====
@@ -159,8 +164,8 @@ object ExerciseLibrary {
         Exercise("Glute Bridge", "Glutes", listOf("Hamstrings"), isBodyweight = true),
         Exercise("Cable Kickback", "Glutes"),
         Exercise("Sumo Deadlift", "Glutes", listOf("Hamstrings", "Adductors", "Lower Back")),
-        Exercise("Bulgarian Split Squat", "Glutes", listOf("Quads")),
-        Exercise("Lunges", "Glutes", listOf("Quads", "Hamstrings")),
+        Exercise("Bulgarian Split Squat (Glutes)", "Glutes", listOf("Quads", "Adductors")),
+        Exercise("Walking Lunges (Glutes)", "Glutes", listOf("Quads", "Hamstrings")),
         Exercise("Single Leg Hip Thrust", "Glutes", listOf("Hamstrings")),
         Exercise("Frog Pump", "Glutes", isBodyweight = true),
         Exercise("Banded Hip Thrust", "Glutes"),
@@ -173,7 +178,7 @@ object ExerciseLibrary {
         Exercise("Single Leg Calf Raise", "Calves", isBodyweight = true),
         
         // ===== ABDUCTORS =====
-        Exercise("Hip Abduction Machine", "Abductors"),
+        Exercise("Hip Abduction Machine", "Abductors", listOf("Glutes")),
         Exercise("Cable Hip Abduction", "Abductors"),
         Exercise("Side Lying Leg Raise", "Abductors", isBodyweight = true),
         Exercise("Banded Clamshell", "Abductors", listOf("Glutes")),
