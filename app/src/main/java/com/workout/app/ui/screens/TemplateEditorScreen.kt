@@ -17,9 +17,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -29,14 +27,9 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FitnessCenter
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.outlined.FitnessCenter
-import androidx.compose.material.icons.outlined.Notes
 import androidx.compose.material.icons.outlined.Timer
-import androidx.compose.material3.BasicAlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
@@ -51,7 +44,6 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -69,6 +61,12 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.workout.app.data.entities.SetType
 import com.workout.app.ui.components.ExercisePicker
+import com.workout.app.ui.components.shared.EditableNoteSection
+import com.workout.app.ui.components.shared.NumericInputField
+import com.workout.app.ui.components.shared.ReorderButtons
+import com.workout.app.ui.components.shared.RestTimePicker
+import com.workout.app.ui.components.shared.SetTypeIndicator
+import com.workout.app.ui.components.shared.formatRestTime
 import com.workout.app.ui.theme.DarkBackground
 import com.workout.app.ui.theme.DropSetColor
 import com.workout.app.ui.theme.InputFieldBackground
@@ -464,38 +462,12 @@ private fun EditableExerciseCard(
                 
                 // Reorder and delete
                 Row {
-                    IconButton(
-                        onClick = onMoveUp,
-                        enabled = !isFirst,
-                        modifier = Modifier.size(32.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.KeyboardArrowUp,
-                            contentDescription = "Move up",
-                            modifier = Modifier.size(20.dp),
-                            tint = if (!isFirst) {
-                                MaterialTheme.colorScheme.onSurfaceVariant
-                            } else {
-                                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f)
-                            }
-                        )
-                    }
-                    IconButton(
-                        onClick = onMoveDown,
-                        enabled = !isLast,
-                        modifier = Modifier.size(32.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.KeyboardArrowDown,
-                            contentDescription = "Move down",
-                            modifier = Modifier.size(20.dp),
-                            tint = if (!isLast) {
-                                MaterialTheme.colorScheme.onSurfaceVariant
-                            } else {
-                                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f)
-                            }
-                        )
-                    }
+                    ReorderButtons(
+                        isFirst = isFirst,
+                        isLast = isLast,
+                        onMoveUp = onMoveUp,
+                        onMoveDown = onMoveDown
+                    )
                     IconButton(
                         onClick = onDelete,
                         modifier = Modifier.size(32.dp)
@@ -511,103 +483,10 @@ private fun EditableExerciseCard(
             }
             
             // Note section (editable)
-            var showNoteEditor by remember { mutableStateOf(false) }
-            var editedNote by remember(exercise.note) { mutableStateOf(exercise.note ?: "") }
-            
-            if (exercise.note != null || showNoteEditor) {
-                Spacer(modifier = Modifier.height(8.dp))
-                
-                if (showNoteEditor) {
-                    // Editable note field
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.Top,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        OutlinedTextField(
-                            value = editedNote,
-                            onValueChange = { editedNote = it },
-                            placeholder = { Text("Add a note...", style = MaterialTheme.typography.bodySmall) },
-                            modifier = Modifier.weight(1f),
-                            textStyle = MaterialTheme.typography.bodySmall,
-                            minLines = 1,
-                            maxLines = 3,
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = MaterialTheme.colorScheme.primary,
-                                unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
-                            )
-                        )
-                        IconButton(
-                            onClick = {
-                                val trimmed = editedNote.trim().takeIf { it.isNotEmpty() }
-                                onNoteChange(trimmed)
-                                showNoteEditor = false
-                            },
-                            modifier = Modifier.size(36.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Check,
-                                contentDescription = "Save note",
-                                tint = MaterialTheme.colorScheme.primary
-                            )
-                        }
-                    }
-                } else {
-                    // Display note with edit option
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f))
-                            .clickable { showNoteEditor = true }
-                            .padding(horizontal = 12.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Outlined.Notes,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = exercise.note ?: "",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.weight(1f)
-                        )
-                        Icon(
-                            imageVector = Icons.Default.Edit,
-                            contentDescription = "Edit note",
-                            modifier = Modifier.size(14.dp),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                        )
-                    }
-                }
-            } else {
-                // Add note button
-                Spacer(modifier = Modifier.height(4.dp))
-                Row(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .clickable { showNoteEditor = true }
-                        .padding(horizontal = 4.dp, vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.Notes,
-                        contentDescription = null,
-                        modifier = Modifier.size(14.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        text = "Add note",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                    )
-                }
-            }
+            EditableNoteSection(
+                note = exercise.note,
+                onNoteChange = onNoteChange
+            )
             
             Spacer(modifier = Modifier.height(16.dp))
             
@@ -777,7 +656,7 @@ private fun EditableExerciseCard(
     showRestPicker?.let { setIndex ->
         val currentSet = exercise.sets.getOrNull(setIndex)
         if (currentSet != null) {
-            TemplateRestTimePicker(
+            RestTimePicker(
                 currentSeconds = currentSet.restSeconds ?: 90,
                 onTimeSelected = { seconds ->
                     onSetChange(setIndex, currentSet.copy(restSeconds = seconds))
@@ -811,57 +690,30 @@ private fun TemplateSetRow(
             verticalAlignment = Alignment.CenterVertically
         ) {
             // Set type indicator - clickable
-            val (typeText, typeColor) = when (set.setType) {
-                SetType.REGULAR -> "$displayNumber" to MaterialTheme.colorScheme.primary
-                SetType.WARMUP -> "W" to WarmupColor
-                SetType.DROP_SET -> "D" to DropSetColor
-            }
-            
-            Box(
-                modifier = Modifier
-                    .size(32.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(typeColor.copy(alpha = 0.15f))
-                    .border(
-                        width = 1.dp,
-                        color = typeColor.copy(alpha = 0.4f),
-                        shape = RoundedCornerShape(8.dp)
-                    )
-                    .clickable {
-                        val nextType = when (set.setType) {
-                            SetType.REGULAR -> SetType.WARMUP
-                            SetType.WARMUP -> SetType.DROP_SET
-                            SetType.DROP_SET -> SetType.REGULAR
-                        }
-                        onSetTypeChange(nextType)
-                    },
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = typeText,
-                    style = MaterialTheme.typography.bodyMedium.copy(
-                        fontWeight = FontWeight.Bold
-                    ),
-                    color = typeColor,
-                    textAlign = TextAlign.Center
-                )
-            }
+            SetTypeIndicator(
+                setType = set.setType,
+                displayNumber = displayNumber,
+                enabled = true,
+                onSetTypeChange = onSetTypeChange
+            )
             
             Spacer(modifier = Modifier.width(8.dp))
             
             // Weight input
-            TemplateInputField(
+            NumericInputField(
                 value = set.targetWeight?.toString() ?: "",
                 onValueChange = { onWeightChange(it.toIntOrNull()) },
+                height = 44.dp,
                 modifier = Modifier.weight(1f)
             )
             
             Spacer(modifier = Modifier.width(8.dp))
             
             // Reps input
-            TemplateInputField(
+            NumericInputField(
                 value = set.targetReps?.toString() ?: "",
                 onValueChange = { onRepsChange(it.toIntOrNull()) },
+                height = 44.dp,
                 modifier = Modifier.weight(1f)
             )
             
@@ -931,300 +783,6 @@ private fun TemplateSetRow(
                     .height(1.dp)
                     .background(InputFieldBorder)
             )
-        }
-    }
-}
-
-@Composable
-private fun TemplateInputField(
-    value: String,
-    onValueChange: (String) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Box(
-        modifier = modifier
-            .height(44.dp)
-            .clip(RoundedCornerShape(8.dp))
-            .background(InputFieldBackground)
-            .border(
-                width = 1.dp,
-                color = InputFieldBorder,
-                shape = RoundedCornerShape(8.dp)
-            ),
-        contentAlignment = Alignment.Center
-    ) {
-        BasicTextField(
-            value = value,
-            onValueChange = { newValue ->
-                if (newValue.isEmpty() || newValue.all { it.isDigit() }) {
-                    onValueChange(newValue)
-                }
-            },
-            textStyle = MaterialTheme.typography.bodyLarge.copy(
-                color = MaterialTheme.colorScheme.onSurface,
-                textAlign = TextAlign.Center,
-                fontWeight = FontWeight.Medium
-            ),
-            singleLine = true,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 8.dp),
-            decorationBox = { innerTextField ->
-                Box(
-                    contentAlignment = Alignment.Center,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    if (value.isEmpty()) {
-                        Text(
-                            text = "—",
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f),
-                            textAlign = TextAlign.Center
-                        )
-                    }
-                    innerTextField()
-                }
-            }
-        )
-    }
-}
-
-private fun formatRestTime(seconds: Int): String {
-    val mins = seconds / 60
-    val secs = seconds % 60
-    return String.format("%d:%02d", mins, secs)
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun TemplateRestTimePicker(
-    currentSeconds: Int,
-    onTimeSelected: (Int) -> Unit,
-    onDismiss: () -> Unit
-) {
-    // Quick preset options (most common rest times)
-    val presets = listOf(30, 60, 90, 120, 180)
-    
-    var showCustomPicker by remember { mutableStateOf(false) }
-    var selectedTime by remember { mutableStateOf(currentSeconds) }
-    
-    // Check if current value is a preset or custom
-    val isCustomValue = currentSeconds !in presets
-    
-    BasicAlertDialog(onDismissRequest = onDismiss) {
-        Surface(
-            shape = RoundedCornerShape(28.dp),
-            color = MaterialTheme.colorScheme.surface,
-            tonalElevation = 6.dp
-        ) {
-            Column(
-                modifier = Modifier.padding(24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text(
-                    text = "Rest Time",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.SemiBold
-                )
-                
-                Spacer(modifier = Modifier.height(20.dp))
-                
-                if (showCustomPicker) {
-                    // Custom time picker with scrollable list
-                    TemplateCustomTimePicker(
-                        currentSeconds = selectedTime,
-                        onTimeSelected = { time ->
-                            selectedTime = time
-                        }
-                    )
-                    
-                    Spacer(modifier = Modifier.height(16.dp))
-                    
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        // Back button
-                        TextButton(onClick = { showCustomPicker = false }) {
-                            Text("Back")
-                        }
-                        
-                        // Confirm button
-                        Surface(
-                            onClick = { onTimeSelected(selectedTime) },
-                            shape = RoundedCornerShape(20.dp),
-                            color = MaterialTheme.colorScheme.primary
-                        ) {
-                            Text(
-                                text = "Set ${formatRestTime(selectedTime)}",
-                                style = MaterialTheme.typography.labelLarge,
-                                color = MaterialTheme.colorScheme.onPrimary,
-                                modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp)
-                            )
-                        }
-                    }
-                } else {
-                    // Quick preset chips
-                    Column(
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        // Row 1: 30s, 1:00, 1:30
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            presets.take(3).forEach { seconds ->
-                                TemplatePresetChip(
-                                    text = formatRestTime(seconds),
-                                    isSelected = currentSeconds == seconds,
-                                    onClick = { onTimeSelected(seconds) },
-                                    modifier = Modifier.weight(1f)
-                                )
-                            }
-                        }
-                        
-                        // Row 2: 2:00, 3:00, Custom
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            presets.drop(3).forEach { seconds ->
-                                TemplatePresetChip(
-                                    text = formatRestTime(seconds),
-                                    isSelected = currentSeconds == seconds,
-                                    onClick = { onTimeSelected(seconds) },
-                                    modifier = Modifier.weight(1f)
-                                )
-                            }
-                            
-                            // Custom button
-                            TemplatePresetChip(
-                                text = if (isCustomValue) formatRestTime(currentSeconds) else "Custom",
-                                isSelected = isCustomValue,
-                                onClick = { 
-                                    selectedTime = currentSeconds
-                                    showCustomPicker = true 
-                                },
-                                modifier = Modifier.weight(1f),
-                                isCustom = true
-                            )
-                        }
-                    }
-                    
-                    Spacer(modifier = Modifier.height(16.dp))
-                    
-                    // Cancel button
-                    TextButton(onClick = onDismiss) {
-                        Text("Cancel")
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun TemplatePresetChip(
-    text: String,
-    isSelected: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    isCustom: Boolean = false
-) {
-    Surface(
-        onClick = onClick,
-        shape = RoundedCornerShape(12.dp),
-        color = when {
-            isSelected -> MaterialTheme.colorScheme.primary
-            isCustom -> MaterialTheme.colorScheme.tertiary.copy(alpha = 0.15f)
-            else -> MaterialTheme.colorScheme.surfaceVariant
-        },
-        modifier = modifier
-    ) {
-        Text(
-            text = text,
-            style = MaterialTheme.typography.bodyMedium.copy(
-                fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium
-            ),
-            color = when {
-                isSelected -> MaterialTheme.colorScheme.onPrimary
-                isCustom -> MaterialTheme.colorScheme.tertiary
-                else -> MaterialTheme.colorScheme.onSurfaceVariant
-            },
-            textAlign = TextAlign.Center,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 12.dp)
-        )
-    }
-}
-
-@Composable
-private fun TemplateCustomTimePicker(
-    currentSeconds: Int,
-    onTimeSelected: (Int) -> Unit
-) {
-    // Generate time options from 0:15 to 10:00 in 15-second increments
-    val timeOptions = remember {
-        (15..600 step 15).toList()
-    }
-    
-    val listState = rememberLazyListState()
-    
-    // Find initial index
-    val initialIndex = remember(currentSeconds) {
-        timeOptions.indexOfFirst { it >= currentSeconds }.coerceAtLeast(0)
-    }
-    
-    LaunchedEffect(Unit) {
-        // Scroll to center the current selection
-        listState.scrollToItem((initialIndex - 2).coerceAtLeast(0))
-    }
-    
-    Box(
-        modifier = Modifier
-            .height(180.dp)
-            .fillMaxWidth()
-    ) {
-        LazyColumn(
-            state = listState,
-            horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            items(timeOptions) { seconds ->
-                val isSelected = seconds == currentSeconds
-                
-                Surface(
-                    onClick = { onTimeSelected(seconds) },
-                    shape = RoundedCornerShape(12.dp),
-                    color = if (isSelected) {
-                        MaterialTheme.colorScheme.primaryContainer
-                    } else {
-                        Color.Transparent
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 2.dp, horizontal = 16.dp)
-                ) {
-                    Text(
-                        text = formatRestTime(seconds),
-                        style = MaterialTheme.typography.titleLarge.copy(
-                            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
-                        ),
-                        color = if (isSelected) {
-                            MaterialTheme.colorScheme.onPrimaryContainer
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                        },
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 8.dp)
-                    )
-                }
-            }
         }
     }
 }

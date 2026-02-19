@@ -13,15 +13,11 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Timer
-import androidx.compose.material3.BasicAlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -31,7 +27,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -46,19 +41,14 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.workout.app.data.entities.SetType
+import com.workout.app.ui.components.shared.NumericInputField
+import com.workout.app.ui.components.shared.RestTimePicker
+import com.workout.app.ui.components.shared.SetTypeIndicator
+import com.workout.app.ui.components.shared.formatRestTime
 import com.workout.app.ui.theme.DropSetColor
 import com.workout.app.ui.theme.InputFieldBackground
 import com.workout.app.ui.theme.InputFieldBorder
 import com.workout.app.ui.theme.WarmupColor
-
-/**
- * Format seconds to mm:ss display
- */
-private fun formatRestTime(seconds: Int): String {
-    val mins = seconds / 60
-    val secs = seconds % 60
-    return String.format("%02d:%02d", mins, secs)
-}
 
 /**
  * A row representing a single set in an exercise.
@@ -104,42 +94,12 @@ fun SetRow(
             verticalAlignment = Alignment.CenterVertically
         ) {
             // Set type indicator - clickable to cycle through types
-            val (typeText, typeColor) = when (setType) {
-                SetType.REGULAR -> "$displayNumber" to MaterialTheme.colorScheme.primary
-                SetType.WARMUP -> "W" to WarmupColor
-                SetType.DROP_SET -> "D" to DropSetColor
-            }
-            
-            Box(
-                modifier = Modifier
-                    .size(32.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(typeColor.copy(alpha = 0.15f))
-                    .border(
-                        width = 1.dp,
-                        color = typeColor.copy(alpha = 0.4f),
-                        shape = RoundedCornerShape(8.dp)
-                    )
-                    .clickable(enabled = !isCompleted) {
-                        // Cycle through set types: Regular -> Warmup -> Drop Set -> Regular
-                        val nextType = when (setType) {
-                            SetType.REGULAR -> SetType.WARMUP
-                            SetType.WARMUP -> SetType.DROP_SET
-                            SetType.DROP_SET -> SetType.REGULAR
-                        }
-                        onSetTypeChange(nextType)
-                    },
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = typeText,
-                    style = MaterialTheme.typography.bodyMedium.copy(
-                        fontWeight = FontWeight.Bold
-                    ),
-                    color = typeColor,
-                    textAlign = TextAlign.Center
-                )
-            }
+            SetTypeIndicator(
+                setType = setType,
+                displayNumber = displayNumber,
+                enabled = !isCompleted,
+                onSetTypeChange = onSetTypeChange
+            )
             
             Spacer(modifier = Modifier.width(8.dp))
             
@@ -159,7 +119,7 @@ fun SetRow(
             Spacer(modifier = Modifier.width(8.dp))
             
             // Weight input - with dark background and ghost text from previous
-            InputField(
+            NumericInputField(
                 value = weight?.toString() ?: "",
                 onValueChange = { onWeightChange(it.toIntOrNull()) },
                 enabled = !isCompleted,
@@ -170,7 +130,7 @@ fun SetRow(
             Spacer(modifier = Modifier.width(8.dp))
             
             // Reps input - with dark background and ghost text from previous
-            InputField(
+            NumericInputField(
                 value = reps?.toString() ?: "",
                 onValueChange = { onRepsChange(it.toIntOrNull()) },
                 enabled = !isCompleted,
@@ -291,72 +251,6 @@ fun SetRow(
 }
 
 /**
- * Custom input field with dark background for better contrast
- */
-@Composable
-private fun InputField(
-    value: String,
-    onValueChange: (String) -> Unit,
-    enabled: Boolean,
-    placeholder: String? = null,
-    modifier: Modifier = Modifier
-) {
-    Box(
-        modifier = modifier
-            .height(48.dp)
-            .clip(RoundedCornerShape(8.dp))
-            .background(InputFieldBackground)
-            .border(
-                width = 1.dp,
-                color = InputFieldBorder,
-                shape = RoundedCornerShape(8.dp)
-            ),
-        contentAlignment = Alignment.Center
-    ) {
-        BasicTextField(
-            value = value,
-            onValueChange = { newValue ->
-                // Only allow numbers
-                if (newValue.isEmpty() || newValue.all { it.isDigit() }) {
-                    onValueChange(newValue)
-                }
-            },
-            enabled = enabled,
-            textStyle = MaterialTheme.typography.bodyLarge.copy(
-                color = MaterialTheme.colorScheme.onSurface,
-                textAlign = TextAlign.Center,
-                fontWeight = FontWeight.Medium
-            ),
-            singleLine = true,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 8.dp),
-            decorationBox = { innerTextField ->
-                Box(
-                    contentAlignment = Alignment.Center,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    if (value.isEmpty()) {
-                        Text(
-                            text = placeholder ?: "—",
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = if (placeholder != null) 
-                                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                            else 
-                                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f),
-                            textAlign = TextAlign.Center
-                        )
-                    }
-                    innerTextField()
-                }
-            }
-        )
-    }
-}
-
-/**
  * Custom dropdown picker for RPE (Rate of Perceived Exertion) values 5-10
  */
 @Composable
@@ -431,262 +325,6 @@ private fun RpeInputField(
                         expanded = false
                     }
                 )
-            }
-        }
-    }
-}
-
-/**
- * A rest time picker dialog with quick presets and custom option
- */
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun RestTimePicker(
-    currentSeconds: Int,
-    onTimeSelected: (Int) -> Unit,
-    onDismiss: () -> Unit
-) {
-    // Quick preset options (most common rest times)
-    val presets = listOf(30, 60, 90, 120, 180)
-    
-    var showCustomPicker by remember { mutableStateOf(false) }
-    var selectedTime by remember { mutableStateOf(currentSeconds) }
-    
-    // Check if current value is a preset or custom
-    val isCustomValue = currentSeconds !in presets
-    
-    BasicAlertDialog(
-        onDismissRequest = onDismiss
-    ) {
-        Surface(
-            shape = RoundedCornerShape(24.dp),
-            color = MaterialTheme.colorScheme.surface,
-            tonalElevation = 8.dp
-        ) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.padding(24.dp)
-            ) {
-                Text(
-                    text = "Rest Time",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                
-                Spacer(modifier = Modifier.height(20.dp))
-                
-                if (showCustomPicker) {
-                    // Custom time picker with scrollable list
-                    CustomTimePicker(
-                        currentSeconds = selectedTime,
-                        onTimeSelected = { time ->
-                            selectedTime = time
-                        }
-                    )
-                    
-                    Spacer(modifier = Modifier.height(16.dp))
-                    
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        // Back button
-                        Surface(
-                            onClick = { showCustomPicker = false },
-                            shape = RoundedCornerShape(20.dp),
-                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                        ) {
-                            Text(
-                                text = "Back",
-                                style = MaterialTheme.typography.labelLarge,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp)
-                            )
-                        }
-                        
-                        // Confirm button
-                        Surface(
-                            onClick = { onTimeSelected(selectedTime) },
-                            shape = RoundedCornerShape(20.dp),
-                            color = MaterialTheme.colorScheme.primary
-                        ) {
-                            Text(
-                                text = "Set ${formatRestTime(selectedTime)}",
-                                style = MaterialTheme.typography.labelLarge,
-                                color = MaterialTheme.colorScheme.onPrimary,
-                                modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp)
-                            )
-                        }
-                    }
-                } else {
-                    // Quick preset chips
-                    Column(
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        // Row 1: 30s, 1:00, 1:30
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            presets.take(3).forEach { seconds ->
-                                PresetChip(
-                                    text = formatRestTime(seconds),
-                                    isSelected = currentSeconds == seconds,
-                                    onClick = { onTimeSelected(seconds) },
-                                    modifier = Modifier.weight(1f)
-                                )
-                            }
-                        }
-                        
-                        // Row 2: 2:00, 3:00
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            presets.drop(3).forEach { seconds ->
-                                PresetChip(
-                                    text = formatRestTime(seconds),
-                                    isSelected = currentSeconds == seconds,
-                                    onClick = { onTimeSelected(seconds) },
-                                    modifier = Modifier.weight(1f)
-                                )
-                            }
-                            
-                            // Custom button
-                            PresetChip(
-                                text = if (isCustomValue) formatRestTime(currentSeconds) else "Custom",
-                                isSelected = isCustomValue,
-                                onClick = { 
-                                    selectedTime = currentSeconds
-                                    showCustomPicker = true 
-                                },
-                                modifier = Modifier.weight(1f),
-                                isCustom = true
-                            )
-                        }
-                    }
-                    
-                    Spacer(modifier = Modifier.height(16.dp))
-                    
-                    // Cancel button
-                    Surface(
-                        onClick = onDismiss,
-                        shape = RoundedCornerShape(20.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                    ) {
-                        Text(
-                            text = "Cancel",
-                            style = MaterialTheme.typography.labelLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(horizontal = 32.dp, vertical = 12.dp)
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun PresetChip(
-    text: String,
-    isSelected: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    isCustom: Boolean = false
-) {
-    Surface(
-        onClick = onClick,
-        shape = RoundedCornerShape(12.dp),
-        color = when {
-            isSelected -> MaterialTheme.colorScheme.primary
-            isCustom -> MaterialTheme.colorScheme.tertiary.copy(alpha = 0.15f)
-            else -> MaterialTheme.colorScheme.surfaceVariant
-        },
-        modifier = modifier
-    ) {
-        Text(
-            text = text,
-            style = MaterialTheme.typography.bodyMedium.copy(
-                fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium
-            ),
-            color = when {
-                isSelected -> MaterialTheme.colorScheme.onPrimary
-                isCustom -> MaterialTheme.colorScheme.tertiary
-                else -> MaterialTheme.colorScheme.onSurfaceVariant
-            },
-            textAlign = TextAlign.Center,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 12.dp)
-        )
-    }
-}
-
-@Composable
-private fun CustomTimePicker(
-    currentSeconds: Int,
-    onTimeSelected: (Int) -> Unit
-) {
-    // Generate time options from 0:15 to 10:00 in 15-second increments
-    val timeOptions = remember {
-        (15..600 step 15).toList()
-    }
-    
-    val listState = rememberLazyListState()
-    
-    // Find initial index
-    val initialIndex = remember(currentSeconds) {
-        timeOptions.indexOfFirst { it >= currentSeconds }.coerceAtLeast(0)
-    }
-    
-    LaunchedEffect(Unit) {
-        // Scroll to center the current selection
-        listState.scrollToItem((initialIndex - 2).coerceAtLeast(0))
-    }
-    
-    Box(
-        modifier = Modifier
-            .height(180.dp)
-            .fillMaxWidth()
-    ) {
-        LazyColumn(
-            state = listState,
-            horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            items(timeOptions) { seconds ->
-                val isSelected = seconds == currentSeconds
-                
-                Surface(
-                    onClick = { onTimeSelected(seconds) },
-                    shape = RoundedCornerShape(12.dp),
-                    color = if (isSelected) {
-                        MaterialTheme.colorScheme.primaryContainer
-                    } else {
-                        Color.Transparent
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 2.dp, horizontal = 16.dp)
-                ) {
-                    Text(
-                        text = formatRestTime(seconds),
-                        style = MaterialTheme.typography.titleLarge.copy(
-                            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
-                        ),
-                        color = if (isSelected) {
-                            MaterialTheme.colorScheme.onPrimaryContainer
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                        },
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 8.dp)
-                    )
-                }
             }
         }
     }

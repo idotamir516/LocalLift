@@ -1,3 +1,50 @@
 <resources>
     <string name="app_name">WorkoutTracker</string>
+    
+    <!-- Common actions -->
+    <string name="action_confirm">Confirm</string>
+    <string name="action_cancel">Cancel</string>
+    <string name="action_delete">Delete</string>
+    <string name="action_save">Save</string>
+    <string name="action_back">Back</string>
+    <string name="action_custom">Custom</string>
+    
+    <!-- Rest time picker -->
+    <string name="rest_time_title">Rest Time</string>
+    <string name="rest_time_set">Set %1$s</string>
+    
+    <!-- Notes -->
+    <string name="add_note_placeholder">Add a note…</string>
+    <string name="add_note_button">Add note</string>
+    <string name="save_note">Save note</string>
+    <string name="edit_note">Edit note</string>
+    
+    <!-- Set types -->
+    <string name="set_type_regular">Regular</string>
+    <string name="set_type_warmup">Warmup</string>
+    <string name="set_type_warmup_short">W</string>
+    <string name="set_type_drop_set">Drop set</string>
+    <string name="set_type_drop_short">D</string>
+    
+    <!-- Accessibility -->
+    <string name="a11y_move_up">Move %1$s up</string>
+    <string name="a11y_move_down">Move %1$s down</string>
+    <string name="a11y_cannot_move_up">Cannot move up, already first</string>
+    <string name="a11y_cannot_move_down">Cannot move down, already last</string>
+    <string name="a11y_numeric_input">Numeric input</string>
+    <string name="a11y_current_value">current value %1$s</string>
+    <string name="a11y_previous_value">previous value %1$s</string>
+    <string name="a11y_disabled">disabled</string>
+    <string name="a11y_tap_to_change">Tap to change to %1$s</string>
+    <string name="a11y_set_rest_time">Set rest time to %1$s</string>
+    <string name="a11y_open_custom_picker">Open custom time picker</string>
+    <string name="a11y_go_back">Go back to preset options</string>
+    <string name="a11y_cancel_close">Cancel and close dialog</string>
+    <string name="a11y_select_rest_time">Select %1$s rest time</string>
+    
+    <!-- Confirmation dialog defaults -->
+    <string name="dialog_confirm_title">Confirm</string>
+    
+    <!-- Placeholder -->
+    <string name="placeholder_empty">—</string>
 </resources>

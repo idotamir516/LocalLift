@@ -22,7 +22,6 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.outlined.Schedule
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -58,6 +57,7 @@ import com.workout.app.data.entities.WorkoutSession
 import com.workout.app.ui.components.ExerciseCard
 import com.workout.app.ui.components.RestTimerDisplay
 import com.workout.app.ui.components.SetData
+import com.workout.app.ui.components.shared.ConfirmationDialog
 import com.workout.app.util.TimerState
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.SharedFlow
@@ -412,49 +412,32 @@ fun ActiveWorkoutScreen(
     
     // Cancel confirmation dialog
     if (showCancelDialog) {
-        AlertDialog(
-            onDismissRequest = { showCancelDialog = false },
-            title = { Text("Cancel Workout?") },
-            text = { Text("Your progress will be lost. Are you sure you want to cancel?") },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        showCancelDialog = false
-                        onCancelWorkout()
-                    }
-                ) {
-                    Text("Cancel Workout", color = MaterialTheme.colorScheme.error)
-                }
+        ConfirmationDialog(
+            title = "Cancel Workout?",
+            message = "Your progress will be lost. Are you sure you want to cancel?",
+            confirmLabel = "Cancel Workout",
+            dismissLabel = "Keep Going",
+            isDestructive = true,
+            onConfirm = {
+                showCancelDialog = false
+                onCancelWorkout()
             },
-            dismissButton = {
-                TextButton(onClick = { showCancelDialog = false }) {
-                    Text("Keep Going")
-                }
-            }
+            onDismiss = { showCancelDialog = false }
         )
     }
     
     // Finish confirmation dialog
     if (showFinishDialog) {
-        AlertDialog(
-            onDismissRequest = { showFinishDialog = false },
-            title = { Text("Finish Workout?") },
-            text = { Text("Mark this workout as complete?") },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        showFinishDialog = false
-                        onFinishWorkout()
-                    }
-                ) {
-                    Text("Finish")
-                }
+        ConfirmationDialog(
+            title = "Finish Workout?",
+            message = "Mark this workout as complete?",
+            confirmLabel = "Finish",
+            dismissLabel = "Continue",
+            onConfirm = {
+                showFinishDialog = false
+                onFinishWorkout()
             },
-            dismissButton = {
-                TextButton(onClick = { showFinishDialog = false }) {
-                    Text("Continue")
-                }
-            }
+            onDismiss = { showFinishDialog = false }
         )
     }
 }

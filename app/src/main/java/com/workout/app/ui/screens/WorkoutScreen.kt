@@ -34,7 +34,6 @@ import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.outlined.FitnessCenter
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -69,6 +68,7 @@ import com.workout.app.ui.components.DeleteFolderDialog
 import com.workout.app.ui.components.FolderDialog
 import com.workout.app.ui.components.MoveToFolderDialog
 import com.workout.app.ui.components.parseColorHex
+import com.workout.app.ui.components.shared.ConfirmationDialog
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 
@@ -352,27 +352,16 @@ fun WorkoutScreen(
     }
     
     templateToDelete?.let { template ->
-        AlertDialog(
-            onDismissRequest = { templateToDelete = null },
-            title = { Text("Delete Template?") },
-            text = { 
-                Text("Are you sure you want to delete \"${template.template.name}\"? This action cannot be undone.") 
+        ConfirmationDialog(
+            title = "Delete Template?",
+            message = "Are you sure you want to delete \"${template.template.name}\"? This action cannot be undone.",
+            confirmLabel = "Delete",
+            isDestructive = true,
+            onConfirm = {
+                onDeleteTemplate(template.template.id)
+                templateToDelete = null
             },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        onDeleteTemplate(template.template.id)
-                        templateToDelete = null
-                    }
-                ) {
-                    Text("Delete", color = MaterialTheme.colorScheme.error)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { templateToDelete = null }) {
-                    Text("Cancel")
-                }
-            }
+            onDismiss = { templateToDelete = null }
         )
     }
 }

@@ -22,13 +22,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.outlined.FitnessCenter
-import androidx.compose.material.icons.outlined.Notes
 import androidx.compose.material.icons.outlined.SwapVert
 import androidx.compose.material.icons.outlined.Timer
 import androidx.compose.material3.Card
@@ -62,11 +59,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-
-/**
- * Data class representing a set within an exercise.
- */
 import com.workout.app.data.entities.SetType
+import com.workout.app.ui.components.shared.EditableNoteSection
+import com.workout.app.ui.components.shared.ReorderButtons
 
 /**
  * Data class representing a set within an exercise.
@@ -232,38 +227,12 @@ fun ExerciseCard(
                 
                 // Expand/collapse and reorder
                 Row {
-                    IconButton(
-                        onClick = onMoveUp,
-                        enabled = !isFirst,
-                        modifier = Modifier.size(32.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.KeyboardArrowUp,
-                            contentDescription = "Move up",
-                            modifier = Modifier.size(20.dp),
-                            tint = if (!isFirst) {
-                                MaterialTheme.colorScheme.onSurfaceVariant
-                            } else {
-                                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f)
-                            }
-                        )
-                    }
-                    IconButton(
-                        onClick = onMoveDown,
-                        enabled = !isLast,
-                        modifier = Modifier.size(32.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.KeyboardArrowDown,
-                            contentDescription = "Move down",
-                            modifier = Modifier.size(20.dp),
-                            tint = if (!isLast) {
-                                MaterialTheme.colorScheme.onSurfaceVariant
-                            } else {
-                                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f)
-                            }
-                        )
-                    }
+                    ReorderButtons(
+                        isFirst = isFirst,
+                        isLast = isLast,
+                        onMoveUp = onMoveUp,
+                        onMoveDown = onMoveDown
+                    )
                     
                     // Delete exercise button
                     IconButton(
@@ -281,103 +250,10 @@ fun ExerciseCard(
             }
             
             // Note section (expandable)
-            var showNoteEditor by remember { mutableStateOf(false) }
-            var editedNote by remember(note) { mutableStateOf(note ?: "") }
-            
-            if (note != null || showNoteEditor) {
-                Spacer(modifier = Modifier.height(8.dp))
-                
-                if (showNoteEditor) {
-                    // Editable note field
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.Top,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        OutlinedTextField(
-                            value = editedNote,
-                            onValueChange = { editedNote = it },
-                            placeholder = { Text("Add a note...", style = MaterialTheme.typography.bodySmall) },
-                            modifier = Modifier.weight(1f),
-                            textStyle = MaterialTheme.typography.bodySmall,
-                            minLines = 1,
-                            maxLines = 3,
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = MaterialTheme.colorScheme.primary,
-                                unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
-                            )
-                        )
-                        IconButton(
-                            onClick = {
-                                val trimmed = editedNote.trim().takeIf { it.isNotEmpty() }
-                                onNoteChange(trimmed)
-                                showNoteEditor = false
-                            },
-                            modifier = Modifier.size(36.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Check,
-                                contentDescription = "Save note",
-                                tint = MaterialTheme.colorScheme.primary
-                            )
-                        }
-                    }
-                } else {
-                    // Display note with edit option
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f))
-                            .clickable { showNoteEditor = true }
-                            .padding(horizontal = 12.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Outlined.Notes,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = note ?: "",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.weight(1f)
-                        )
-                        Icon(
-                            imageVector = Icons.Default.Edit,
-                            contentDescription = "Edit note",
-                            modifier = Modifier.size(14.dp),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                        )
-                    }
-                }
-            } else {
-                // Add note button
-                Spacer(modifier = Modifier.height(4.dp))
-                Row(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .clickable { showNoteEditor = true }
-                        .padding(horizontal = 4.dp, vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.Notes,
-                        contentDescription = null,
-                        modifier = Modifier.size(14.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        text = "Add note",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                    )
-                }
-            }
+            EditableNoteSection(
+                note = note,
+                onNoteChange = onNoteChange
+            )
             
             // Expanded content with sets
             if (isExpanded) {
