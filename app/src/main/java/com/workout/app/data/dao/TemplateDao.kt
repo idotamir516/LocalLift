@@ -97,6 +97,14 @@ interface TemplateDao {
     // Update existing template
     @Update
     suspend fun updateTemplate(template: WorkoutTemplate)
+
+    // Update template name without touching folder assignment or createdAt
+    @Query("UPDATE workout_templates SET name = :name, updatedAt = :updatedAt WHERE id = :templateId")
+    suspend fun updateTemplateName(
+        templateId: Long,
+        name: String,
+        updatedAt: Long = System.currentTimeMillis()
+    )
     
     // Delete template by ID (exercises cascade automatically)
     @Query("DELETE FROM workout_templates WHERE id = :templateId")

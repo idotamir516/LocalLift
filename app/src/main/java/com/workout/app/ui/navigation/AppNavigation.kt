@@ -932,12 +932,9 @@ fun AppNavigation() {
                             scope.launch {
                                 if (templateId != null) {
                                     // Update existing template
-                                    database.templateDao().updateTemplate(
-                                        WorkoutTemplate(
-                                            id = templateId,
-                                            name = name,
-                                            updatedAt = System.currentTimeMillis()
-                                        )
+                                    database.templateDao().updateTemplateName(
+                                        templateId = templateId,
+                                        name = name
                                     )
                                     // Delete old exercises (sets cascade delete)
                                     database.templateDao().deleteExercisesForTemplate(templateId)
@@ -1123,8 +1120,9 @@ fun AppNavigation() {
                                         database.templateDao().deleteTemplateExercise(exercise)
                                     }
                                     // Update the template name in case it changed (unlikely but safe)
-                                    database.templateDao().updateTemplate(
-                                        WorkoutTemplate(id = existingTemplateId, name = templateName)
+                                    database.templateDao().updateTemplateName(
+                                        templateId = existingTemplateId,
+                                        name = templateName
                                     )
                                     templateId = existingTemplateId
                                 } else {
